@@ -71,4 +71,3 @@ function objStackAddedFunc(objStackEntityAddedEvent)
     log("An objStack has been added, " .. objStackEntityAddedEvent.count .. "x of " .. objStackEntityAddedEvent.objType.name)
 end
 Event.ObjStackEntityAdded.Subscribe("myEvent", objStackAddedFunc)
-log(Player.GetLevelGameplay(SkillType.ATTACK))
