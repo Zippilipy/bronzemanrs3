@@ -1,7 +1,7 @@
 -- establish important global variables
 -- game window, is the game window
--- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
 game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+-- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 if setOfItemsAcquired==nil then
     log("Persistent DB was nil!")
@@ -13,9 +13,11 @@ end
 local function hasAcquired(id)
     return setOfItemsAcquired[id] ~= nil
 end
+-- isRed is a boolean value that says whether it's red or not, this allows an early return on onMouseRepeat
+local isRed = false
 -- Create a new box for components
 local myComponent = ui.GroupBox.new(game_window)
-myComponent:SetPos(100,200)
+myComponent:SetPos(1000,200)
 myComponent:SetSize(250,200)
 myComponent.stylesheetID = id.StyleSheet.GROUPBOX_CONTENT_PANEL
 -- Add some text
@@ -31,6 +33,14 @@ myButton:SetPos(0,0,0.0,0.5)
 myButton:SetSize(0,0,1.0,0.5)
 myButton.label = "Push this button"
 myButton.stylesheetID = id.StyleSheet.BUTTON_DEFAULT
+local thing_to_be_disabled = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW) -- TOPLEVEL_V2__LOOT_INVENTORY_WINDOW
+-- rectangle to block interaction
+local blocking_rectangle = ui.Rectangle.new(game_window)
+blocking_rectangle:SetPos(thing_to_be_disabled.position.x,thing_to_be_disabled.position.y)
+blocking_rectangle:SetSize(thing_to_be_disabled.size.width,thing_to_be_disabled.size.height)
+blocking_rectangle.clickthrough = true
+blocking_rectangle.colour = Vector4.new(0,0,0,0)
+blocking_rectangle.fill = true
 -- find all items in a 7 tile range for area loot
 -- returns a list of item ids, the same type of ids stored in setOfItemsAcquired
 local function findAllNearbyItemIds()
@@ -42,7 +52,6 @@ local function findAllNearbyItemIds()
     local coordGrid = self.coordGrid
     local allObjects = ObjStackList.ByDistance(coordGrid, 7) -- area loot is 7 tiles
     if #allObjects == 0 then 
-        log("no items nearby")
         return nearbyItemIds
     end
     for _,objStackEntity in ipairs(allObjects) do
@@ -51,7 +60,6 @@ local function findAllNearbyItemIds()
             local name = entry.config.configName
             local id = entry.config.id
             table.insert(nearbyItemIds, id)
-            log(string.format("There is a %s with id %d. Have you acquired this item? Answer: %s", name, id, tostring(hasAcquired(id))))
         end
     end
     return nearbyItemIds
@@ -64,11 +72,9 @@ local function shouldConsumeAreaLoot()
     for _,id in ipairs(nearbyItemIds) do
         local acquired = hasAcquired(id)
         if not acquired then
-            log(true)
             return true
         end
     end
-    log(false)
     return false
 end
 myButton:Subscribe(ui.Hook.ONBUTTONPRESSED, shouldConsumeAreaLoot)
@@ -84,3 +90,23 @@ local function setTextBasedOnAreaLoot()
     myText.content = text
 end
 Event.ServerLogic.Subscribe("setTextBasedOnAreaLootEvent", setTextBasedOnAreaLoot)
+--subscrtibe to mouserepeat events for the blocking rectangle
+blocking_rectangle:Subscribe(ui.Hook.ONMOUSEREPEAT, "mouseEnterHook",
+    function (self)
+        if isRed then -- early return since this is a mouserepeat
+            return
+        end
+        if shouldConsumeAreaLoot() then
+            isRed = true
+            self.clickthrough = false
+            self.colour = Vector4.new(0.5,0,0,0.5)
+        end
+    end
+)
+blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
+    function (self)
+        isRed = false
+        self.clickthrough = true
+        self.colour = Vector4.new(0,0,0,0)
+    end
+)
