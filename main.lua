@@ -110,3 +110,14 @@ blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
         self.colour = Vector4.new(0,0,0,0)
     end
 )
+local function consumeIfNotObtainedLootOnGround(event)
+    local obj = event.entry.objData
+    if (obj == nil) then
+        return
+    end
+    local id = obj.config.id
+    if not hasAcquired(id) then
+        log("Consumed!")
+    end
+end
+Event.MiniMenuEntrySelected.Subscribe("minimenuEvent", consumeIfNotObtainedLootOnGround)
