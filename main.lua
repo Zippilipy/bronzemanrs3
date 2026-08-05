@@ -83,7 +83,6 @@ local function setTextBasedOnAreaLoot()
     if shouldConsume then
         text = "You are NOT eligible to area loot"
     end
-    myText.content = text
 end
 Event.ServerLogic.Subscribe("setTextBasedOnAreaLootEvent", setTextBasedOnAreaLoot)
 --subscrtibe to mouserepeat events for the blocking rectangle
