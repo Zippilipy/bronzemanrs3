@@ -30,22 +30,6 @@ end
 local isRed = false
 -- Create a new box for components
 local myComponent = ui.GroupBox.new(game_window)
-myComponent:SetPos(1600,700)
-myComponent:SetSize(250,200)
-myComponent.stylesheetID = id.StyleSheet.GROUPBOX_CONTENT_PANEL
--- Add some text
-local myText = ui.Text.new(myComponent)
-myText:SetPos(0,0)
-myText:SetSize(0,0,1.0,0.5)
-myText.content = "Hello world!"
-myText.font = id.Font.MUSEO_SANS_15PT_REGULAR
-myText:AlignTo(ui.AlignMode.CENTRE)
--- Add a button
-local myButton = ui.Button.new(myComponent)
-myButton:SetPos(0,0,0.0,0.5)
-myButton:SetSize(0,0,1.0,0.5)
-myButton.label = "Push this button"
-myButton.stylesheetID = id.StyleSheet.BUTTON_DEFAULT
 local thing_to_be_disabled = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW) -- TOPLEVEL_V2__LOOT_INVENTORY_WINDOW
 -- rectangle to block interaction
 local blocking_rectangle = ui.Rectangle.new(game_window)
@@ -90,7 +74,6 @@ local function shouldConsumeAreaLoot()
     end
     return false
 end
-myButton:Subscribe(ui.Hook.ONBUTTONPRESSED, shouldConsumeAreaLoot)
 local function setTextBasedOnAreaLoot()
     -- I thought about doing an early return, based on if the player has moved and whether ObjStackEntityAdded
     -- event triggers but I'm not even sure it would be faster if the player moves a lot
