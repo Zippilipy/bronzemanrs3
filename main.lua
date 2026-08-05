@@ -10,6 +10,19 @@ if setOfItemsAcquired==nil then
     setOfItemsAcquired[15272] = true -- manually add rocktail to list
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
+local function addToAcquired(id, name, objType)
+    if setOfItemsAcquired[id] == nil then
+        setOfItemsAcquired[id] = true
+        log(string.format("%s added to obtained items!", name))
+        local popup = prettyui.AchievementPopup.show({
+            title = "Bronzeman log",
+            text = string.format("New item obtained: %s", name),
+            item = objType,
+            y = 50
+        })
+        PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+    end
+end
 local function hasAcquired(id)
     return setOfItemsAcquired[id] ~= nil
 end
@@ -17,7 +30,7 @@ end
 local isRed = false
 -- Create a new box for components
 local myComponent = ui.GroupBox.new(game_window)
-myComponent:SetPos(1000,200)
+myComponent:SetPos(1600,700)
 myComponent:SetSize(250,200)
 myComponent.stylesheetID = id.StyleSheet.GROUPBOX_CONTENT_PANEL
 -- Add some text
@@ -121,3 +134,7 @@ local function consumeIfNotObtainedLootOnGround(event)
     end
 end
 Event.MiniMenuEntrySelected.Subscribe("minimenuEvent", consumeIfNotObtainedLootOnGround)
+local function addToItemAcquiredFromDrop(event)
+    addToAcquired(event.objType.id, event.objType.name, event.objType)
+end
+Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)

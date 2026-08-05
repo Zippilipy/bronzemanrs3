@@ -1,4 +1,8 @@
 {
     "name": "Bronzeman plugin",
     "version": "1.0",
+	"requiredDependencies": [
+      "prettyui"
+    ],
+    "optionalDependencies": []
 }
