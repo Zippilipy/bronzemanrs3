@@ -1,4 +1,5 @@
 local Queue = require("queue")
+local UI = require("ui")
 -- establish important global variables
 -- game window, is the game window
 game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
@@ -13,12 +14,18 @@ if setOfItemsAcquired==nil then
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 
+UI.load(game_window, setOfItemsAcquired)
+
 -- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
 -- for each server tick, essentially making the collection log popup every 5 ticks.
 local counterForCollectionPopup = 0
 
 -- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
 local collectionPopupQueue = Queue.new()
+
+-- counterForItemSlot has a value [0..7] which will make it so the bronzeman collection log displays 8 items in a row
+-- then switches to a new row
+local counterForItemSlot = 0
 
 local function addToAcquired(id, name, objType)
     if setOfItemsAcquired[id] == nil then
@@ -32,6 +39,8 @@ local function addToAcquired(id, name, objType)
         }
         collectionPopupQueue:enqueue(collectionPopupItem)
         PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+        local object = config.Obj.FromID(id)
+        UI.addItemSlot(object)
     end
 end
 
@@ -92,18 +101,6 @@ local function shouldConsumeAreaLoot()
     return false
 end
 
-local function setTextBasedOnAreaLoot()
-    -- I thought about doing an early return, based on if the player has moved and whether ObjStackEntityAdded
-    -- event triggers but I'm not even sure it would be faster if the player moves a lot
-    -- Certainly if the player is tanking afk a lot, but if so, I don't think the performance is an issue
-    local shouldConsume = shouldConsumeAreaLoot()
-    local text = "You are eligible to area loot"
-    if shouldConsume then
-        text = "You are NOT eligible to area loot"
-    end
-end
-Event.ServerLogic.Subscribe("setTextBasedOnAreaLootEvent", setTextBasedOnAreaLoot)
-
 --subscrtibe to mouserepeat events for the blocking rectangle
 blocking_rectangle:Subscribe(ui.Hook.ONMOUSEREPEAT, "mouseEnterHook",
     function (self)
@@ -125,6 +122,7 @@ blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
     end
 )
 
+-- Right now does nothing, but if I can consume events then this will consume any attempt to click 'loot'
 local function consumeIfNotObtainedLootOnGround(event)
     local obj = event.entry.objData
     if (obj == nil) then
@@ -137,6 +135,8 @@ local function consumeIfNotObtainedLootOnGround(event)
 end
 Event.MiniMenuEntrySelected.Subscribe("minimenuEvent", consumeIfNotObtainedLootOnGround)
 
+-- addToItemAcquiredFromDrop and addToItemAcquiredFromDropChanged both add from items on the ground
+-- I need a way to check ownership of the drop, right now it just counts anything on the ground
 local function addToItemAcquiredFromDrop(event)
     addToAcquired(event.objType.id, event.objType.name, event.objType)
 end
@@ -169,64 +169,3 @@ local function showAchievementPopup()
     counterForCollectionPopup = 1
     end
 Event.ServerLogic.Subscribe("showAchievementPopupEvent", showAchievementPopup)
-
---prettyui stuff
-
-local itemRibbon = nil
-
-local settingsWindow = prettyui.Window.new(game_window, {
-    title = "Plugin settings",
-    x = -210,
-    y = -150,
-    xAnchor = 0.5,
-    yAnchor = 0.5,
-    width = 420,
-    height = 300,
-    minWidth = 320,
-    minHeight = 220,
-    scrollable = true,
-    onClose = function(window)
-        if itemRibbon ~= nil then
-            itemRibbon:SetActive(false)
-        end
-    end,
-})
-
-settingsWindow:AddTitle("Settings")
-
-settingsWindow:SetTitle("Bronzeman Mode")
-settingsWindow:SetSize(460, 320)
-settingsWindow:Close()
-
-
--- Inventory artwork can be used instead of a built-in sprite.
-itemRibbon = prettyui.RibbonBar.Register({
-    id = "bronzeman-plugin",
-    object = config.Obj.BRONZE_MED_HELM,
-    tooltip = "Open Bronzeman plugin",
-    onClick = function(handle, active)
-        settingsWindow.root.hidden = not active
-    end,
-})
-
-local divider = settingsWindow:AddDivider()
-
-local heading = settingsWindow:AddTitle("Your collected items")
-
-local i = 0
-for id, _ in pairs(setOfItemsAcquired) do
-    local object = config.Obj.FromID(id)
-    local slot = nil
-    if i % 8 ~= 0 then
-        slot = settingsWindow:AddItemSlot(object, {
-            inline = true,
-            tooltip = object.name,
-        })
-    else
-        slot = settingsWindow:AddItemSlot(object, {
-            tooltip = object.name,
-        })
-    end
-    slot:SetObject(object)
-    i = i + 1
-end
