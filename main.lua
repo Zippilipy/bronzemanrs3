@@ -141,6 +141,13 @@ local function addToItemAcquiredFromDrop(event)
     addToAcquired(event.objType.id, event.objType.name, event.objType)
 end
 Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
+local function addToItemAcquiredFromDropChanged(event)
+    if event.oldCount > event.newCount then
+        return
+    end
+    addToAcquired(event.objType.id, event.objType.name, event.objType)
+end
+Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
 
 -- Here's my super duper non-threading solution to simultaneous collectionPopupEvents, I store them in a queue
 -- then dequeue every 5 ticks
@@ -165,6 +172,8 @@ Event.ServerLogic.Subscribe("showAchievementPopupEvent", showAchievementPopup)
 
 --prettyui stuff
 
+local itemRibbon = nil
+
 local settingsWindow = prettyui.Window.new(game_window, {
     title = "Plugin settings",
     x = -210,
@@ -177,6 +186,9 @@ local settingsWindow = prettyui.Window.new(game_window, {
     minHeight = 220,
     scrollable = true,
     onClose = function(window)
+        if itemRibbon ~= nil then
+            itemRibbon:SetActive(false)
+        end
     end,
 })
 
@@ -188,7 +200,7 @@ settingsWindow:Close()
 
 
 -- Inventory artwork can be used instead of a built-in sprite.
-local itemRibbon = prettyui.RibbonBar.Register({
+itemRibbon = prettyui.RibbonBar.Register({
     id = "bronzeman-plugin",
     object = config.Obj.BRONZE_MED_HELM,
     tooltip = "Open Bronzeman plugin",
@@ -203,7 +215,6 @@ local heading = settingsWindow:AddTitle("Your collected items")
 
 local i = 0
 for id, _ in pairs(setOfItemsAcquired) do
-    i = i + 1
     local object = config.Obj.FromID(id)
     local slot = nil
     if i % 8 ~= 0 then
@@ -217,4 +228,5 @@ for id, _ in pairs(setOfItemsAcquired) do
         })
     end
     slot:SetObject(object)
+    i = i + 1
 end
