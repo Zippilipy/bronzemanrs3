@@ -23,10 +23,6 @@ local counterForCollectionPopup = 0
 -- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
 local collectionPopupQueue = Queue.new()
 
--- counterForItemSlot has a value [0..7] which will make it so the bronzeman collection log displays 8 items in a row
--- then switches to a new row
-local counterForItemSlot = 0
-
 local function addToAcquired(id, name, objType)
     if setOfItemsAcquired[id] == nil then
         setOfItemsAcquired[id] = true
@@ -40,7 +36,7 @@ local function addToAcquired(id, name, objType)
         collectionPopupQueue:enqueue(collectionPopupItem)
         PersistentDB:Set("acquiredItems",setOfItemsAcquired)
         local object = config.Obj.FromID(id)
-        UI.addItemSlot(object)
+        UI:addItemSlot(object)
     end
 end
 
@@ -53,12 +49,12 @@ local isRed = false
 
 -- Create a new box for components
 local myComponent = ui.GroupBox.new(game_window)
-local thing_to_be_disabled = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW) -- TOPLEVEL_V2__LOOT_INVENTORY_WINDOW
+local thing_to_be_blocked = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW)
 
 -- rectangle to block interaction
 local blocking_rectangle = ui.Rectangle.new(game_window)
-blocking_rectangle:SetPos(thing_to_be_disabled.position.x,thing_to_be_disabled.position.y)
-blocking_rectangle:SetSize(thing_to_be_disabled.size.width,thing_to_be_disabled.size.height)
+blocking_rectangle:SetPos(thing_to_be_blocked.position.x,thing_to_be_blocked.position.y)
+blocking_rectangle:SetSize(thing_to_be_blocked.size.width,thing_to_be_blocked.size.height)
 blocking_rectangle.clickthrough = true
 blocking_rectangle.colour = Vector4.new(0,0,0,0)
 blocking_rectangle.fill = true
@@ -72,7 +68,7 @@ local function findAllNearbyItemIds()
         return nearbyItemIds
     end
     local coordGrid = self.coordGrid
-    local allObjects = ObjStackList.ByDistance(coordGrid, 7) -- area loot is 7 tiles
+    local allObjects = ObjStackList.ByDistance(coordGrid, 11) -- area loot is 7 tiles
     if #allObjects == 0 then 
         return nearbyItemIds
     end
@@ -137,17 +133,17 @@ Event.MiniMenuEntrySelected.Subscribe("minimenuEvent", consumeIfNotObtainedLootO
 
 -- addToItemAcquiredFromDrop and addToItemAcquiredFromDropChanged both add from items on the ground
 -- I need a way to check ownership of the drop, right now it just counts anything on the ground
-local function addToItemAcquiredFromDrop(event)
-    addToAcquired(event.objType.id, event.objType.name, event.objType)
-end
-Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
-local function addToItemAcquiredFromDropChanged(event)
-    if event.oldCount > event.newCount then
-        return
-    end
-    addToAcquired(event.objType.id, event.objType.name, event.objType)
-end
-Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
+--local function addToItemAcquiredFromDrop(event)
+--    addToAcquired(event.objType.id, event.objType.name, event.objType)
+--end
+--Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
+--local function addToItemAcquiredFromDropChanged(event)
+--    if event.oldCount > event.newCount then
+--        return
+--    end
+--    addToAcquired(event.objType.id, event.objType.name, event.objType)
+--end
+--Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
 
 -- Here's my super duper non-threading solution to simultaneous collectionPopupEvents, I store them in a queue
 -- then dequeue every 5 ticks
@@ -169,3 +165,43 @@ local function showAchievementPopup()
     counterForCollectionPopup = 1
     end
 Event.ServerLogic.Subscribe("showAchievementPopupEvent", showAchievementPopup)
+
+-- establish important variables for the shouldShowAreaLoot 
+local isShowing = true -- useful to prevent unnecessary actions
+local loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER) 
+local loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+-- loot component is useful because if the player closes the menu and opens it again, that is a new component, 
+-- so we can do a check if the new is the same as the old
+
+local loot_all_pos_x = loot_all_component.x
+local loot_all_pos_y = loot_all_component.y
+
+local loot_custom_pos_x = loot_custom_component.x
+local loot_custom_pos_y = loot_custom_component.y
+
+local function shouldShowAreaLoot()
+    local new_loot_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
+    if not (loot_all_component == new_loot_component) then -- interface closed
+        loot_all_component = new_loot_component
+        loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+        -- only one check necessary, because if one of them is missing then both are
+        isShowing = true
+    end
+    local shouldShow = not shouldConsumeAreaLoot()
+    if isShowing then
+        if shouldShow then
+            
+        else
+            loot_all_component:SetPos(loot_all_component.position.x + 100, loot_all_component.position.y + 100)
+            loot_custom_component:SetPos(loot_custom_component.position.x + 100, loot_custom_component.position.y + 100)
+            isShowing = false
+        end
+    else
+        if shouldShow then
+            loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
+            loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
+            isShowing = true
+        end
+    end
+end
+Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)

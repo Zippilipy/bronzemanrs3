@@ -70,4 +70,8 @@ function addItemSlot(object)
     counterForItemSlot = (counterForItemSlot + 1) % 8
 end
 
+function UI:addItemSlot(object)
+    addItemSlot(object)
+end
+
 return UI
