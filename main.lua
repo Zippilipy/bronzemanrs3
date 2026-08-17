@@ -168,30 +168,86 @@ Event.ServerLogic.Subscribe("showAchievementPopupEvent", showAchievementPopup)
 
 -- establish important variables for the shouldShowAreaLoot 
 local isShowing = true -- useful to prevent unnecessary actions
-local loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER) 
-local loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+local loot_all_component
+local loot_custom_component
 -- loot component is useful because if the player closes the menu and opens it again, that is a new component, 
 -- so we can do a check if the new is the same as the old
 
-local loot_all_pos_x = loot_all_component.x
-local loot_all_pos_y = loot_all_component.y
+local loot_all_pos_x
+local loot_all_pos_y
 
-local loot_custom_pos_x = loot_custom_component.x
-local loot_custom_pos_y = loot_custom_component.y
+local loot_custom_pos_x
+local loot_custom_pos_y
+
+local initialized = false
+local doubleinit = false
+
+local hasHitADynamic = false
+local function isTheLootInterfaceOpen()
+    -- if we can find a dynamic child component then that means that the loot interface is open
+    local function doesItHitADynamic(input, static)
+        if static then 
+            input:IterateStaticComponents(
+                function (component, visible)
+                    if component.type == ui.ComponentType.LAYER then 
+                        doesItHitADynamic(component, true)
+                        doesItHitADynamic(component, false)
+                    end
+                return false
+                end)
+        else
+            input:IterateDynamicComponents(
+                function (component, visible)
+                    hasHitADynamic = true
+                    return false
+                end)
+        end
+    end
+    doesItHitADynamic(ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__BUTTONS_LAYER), true)
+    return hasHitADynamic
+end
+
+-- if the loot interface is open as the plugin starts, then we can initialize immedietaly, instead of waiting
+-- for the user to open the loot interface
+if isTheLootInterfaceOpen() then
+    loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
+    loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+    isShowing = true
+    if not initialized then
+        initialized = true
+    end
+end
+
+local function lootINV(event)
+    if event.inv.id == id.Inv.LOOT then
+        loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
+        loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+        isShowing = true
+        if not initialized then
+            initialized = true
+        end
+    end
+end
+Event.InventoryAdded.Subscribe("LootInvOpened", lootINV)
 
 local function shouldShowAreaLoot()
-    local new_loot_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
-    if not (loot_all_component == new_loot_component) then -- interface closed
-        loot_all_component = new_loot_component
-        loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
-        -- only one check necessary, because if one of them is missing then both are
-        isShowing = true
+    if not initialized then
+        return
+    end
+    if not doubleinit then -- this function will return the next tick after initialized is set to true
+        loot_all_pos_x = loot_all_component.x
+        loot_all_pos_y = loot_all_component.y
+        loot_custom_pos_x = loot_custom_component.x
+        loot_custom_pos_y = loot_custom_component.y
+        doubleinit = true
     end
     local shouldShow = not shouldConsumeAreaLoot()
     if isShowing then
         if shouldShow then
             
         else
+            -- this hides the components, which also makes it so that the user cannot click on them or
+            -- use the keyboard to activate the area loot button
             loot_all_component:SetPos(loot_all_component.position.x + 100, loot_all_component.position.y + 100)
             loot_custom_component:SetPos(loot_custom_component.position.x + 100, loot_custom_component.position.y + 100)
             isShowing = false
@@ -205,3 +261,34 @@ local function shouldShowAreaLoot()
     end
 end
 Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)
+
+function PluginShutdown()
+    if loot_all_component == nil then
+        return
+    end
+    if loot_custom_component == nil then
+        return
+    end
+    loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
+    loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
+end
+
+local function printAllChildrens(input, static, level)
+    if static then
+        input:IterateStaticComponents(
+            function (component, visible)
+                log(string.format("Found static component with id: %d type: %d at level: %d, visibility: %s", component.staticID, component.type, level, tostring(visible)))
+                if component.type == 20 then
+                    printAllChildrens(component, true, level+1)
+                    printAllChildrens(component, false, level+1)
+                end
+            return false
+            end)
+    else 
+        input:IterateDynamicComponents(
+            function (component, visible)
+                log(string.format("Found dynamic component with id: %d type: %d at level: %d, visibility: %s", component.dynamicID, component.type, level, tostring(visible)))
+            return false
+            end)
+    end
+end
