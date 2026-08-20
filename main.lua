@@ -5,12 +5,21 @@ local UI = require("ui")
 game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 
 -- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
+PersistentDB:Clear()
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 if setOfItemsAcquired==nil then
     log("Persistent DB was nil!")
     setOfItemsAcquired = {}
-    setOfItemsAcquired[995] = true -- manually add coins to list
-    setOfItemsAcquired[15272] = true -- manually add rocktail to list
+    for i=1,100000,1 do -- i = 1041 crashes
+        local object = config.Obj.FromID(i)
+        if object == nil then
+            goto continue
+        end
+        setOfItemsAcquired[i] = object.name
+        ::continue::
+    end
+    --setOfItemsAcquired[id.Obj.COINS] = true -- manually add coins to list
+    --setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = true -- manually add rocktail to list
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 

@@ -6,10 +6,21 @@ local settingsWindow = nil
 
 local counterForItemSlot = 0
 
+local page
+
+local pages = {}
+
 local totalslots = {}
+
+local setOfItemsAcquired
+
+local pageNumber
 
 local function addItemSlot(object)
     if (settingsWindow == nil) then
+        return
+    end
+    if string.len(object.name) == 0 then
         return
     end
     local slot = nil
@@ -24,17 +35,67 @@ local function addItemSlot(object)
         })
     end
     slot:SetObject(object)
-    totalslots[object.name] = {
+    totalslots[object.id] = {
         slot = slot,
         object = object,
         category = object:GetParamValue(config.Param.FromID(2195)) + 1 -- 2195 is GE_CATEGORY, +1 is needed for some reason
     }
-    counterForItemSlot = (counterForItemSlot + 1) % 8
+    counterForItemSlot = (counterForItemSlot + 1) % 12
+    return slot
 end
 
 local function destroyAllSlots()
+    counterForItemSlot = 0
     for key, value in pairs(totalslots) do
         value.slot:Destroy()
+        totalslots[key] = nil
+    end
+end
+
+local function createPages(setOfItemsAcquiredParameter)
+    local sortedIds = {}
+    for id, _ in pairs(setOfItemsAcquiredParameter) do
+        table.insert(sortedIds, id)
+    end
+    table.sort(sortedIds, function(a, b)
+        local textA = setOfItemsAcquired[a]
+        local textB = setOfItemsAcquired[b]
+
+        local startsWithLetterA = string.match(textA, "^[A-Za-z]") ~= nil
+        local startsWithLetterB = string.match(textB, "^[A-Za-z]") ~= nil
+
+        if startsWithLetterA ~= startsWithLetterB then
+            return startsWithLetterA
+        end
+
+        return string.lower(textA) < string.lower(textB)
+    end)
+    local page = 1
+    local pages = {}
+    pages[page] = {}
+    local counterForNextPage = 0
+    for _, id in ipairs(sortedIds) do
+        local object = config.Obj.FromID(id)
+        if string.len(object.name) == 0 then
+            goto continue
+        end
+        counterForNextPage = counterForNextPage + 1
+        table.insert(pages[page], id)
+        if counterForNextPage >= 120 then
+            page = page + 1
+            pages[page] = {}
+            counterForNextPage = 0
+        end
+        ::continue::
+    end
+    return pages
+end
+
+local function addAllItemsFromPages()
+    destroyAllSlots()
+    for _, id in ipairs(pages[page]) do
+        local object = config.Obj.FromID(id)
+        addItemSlot(object)
     end
 end
 
@@ -54,20 +115,29 @@ end
 
 local function resetAllSlots()
     destroyAllSlots()
-    rebuildSlots(totalslots)
+    addAllItemsFromPages()
 end
 
-function UI.load(game_window, setOfItemsAcquired)
+local function updatePageNumber()
+    local count = 0
+    for _ in pairs(pages) do
+        count = count + 1
+    end
+    pageNumber.content = string.format("%d/%d", page, count)
+end
+
+function UI.load(game_window, setOfItemsAcquiredParameter)
+    setOfItemsAcquired = setOfItemsAcquiredParameter
     settingsWindow = prettyui.Window.new(game_window, {
         title = "Plugin settings",
         x = -210,
         y = -150,
         xAnchor = 0.5,
         yAnchor = 0.5,
-        width = 420,
-        height = 300,
-        minWidth = 320,
-        minHeight = 220,
+        width = 420*2,
+        height = 300*2,
+        minWidth = 320*2,
+        minHeight = 220*2,
         scrollable = true,
         onClose = function(window)
             if itemRibbon ~= nil then
@@ -91,83 +161,98 @@ function UI.load(game_window, setOfItemsAcquired)
         end,
     })
 
-    local heading = settingsWindow:AddTitle("Your collected items")
+    local count = 0
+
+    for _ in pairs(setOfItemsAcquiredParameter) do
+        count = count + 1
+    end
+
+    local heading = settingsWindow:AddTitle(string.format("Your collected items: %d", count))
 
     local search = settingsWindow:AddTextField({
         placeholder = "Bronze med helm",
         maxLength = 24,
         onChange = function(field, reason, text)
+            if reason == 4 then -- when you click away from search I don't want to count that
+                return
+            end
+            page = 1
             if string.len(text) == 0 then
-                resetAllSlots()
+                pages = createPages(setOfItemsAcquired)
+                updatePageNumber()
+                addAllItemsFromPages()
             else
                 destroyAllSlots()
-                local searchedslots = {}
+                local searchedSetOfItemsAcquired = {}
                 local searchText = string.lower(text)
-                for key, value in pairs(totalslots) do
-                    local keyText = string.lower(key)
-                    if string.find(keyText, searchText, 1, true) then
-                        searchedslots[key] = value
+                for key, value in pairs(setOfItemsAcquired) do
+                    local valueText = string.lower(value)
+                    if string.find(valueText, searchText, 1, true) then
+                        searchedSetOfItemsAcquired[key] = value
                     end
                 end
-                rebuildSlots(searchedslots)
+                pages = createPages(searchedSetOfItemsAcquired)
+                updatePageNumber()
+                addAllItemsFromPages()
             end
         end,
     })
 
-    local categories = settingsWindow:AddComboBox({
+    categories = settingsWindow:AddComboBox({
         entries = {
             { label = "", id = 0},
-            { label = "1", id = 1},
-            { label = "2", id = 2},
-            { label = "3", id = 3},
-            { label = "4", id = 4},
-            { label = "5", id = 5},
-            { label = "6", id = 6},
-            { label = "7", id = 7},
-            { label = "8", id = 8},
-            { label = "9", id = 9},
-            { label = "10", id = 10},
-            { label = "11", id = 11},
-            { label = "12", id = 12},
-            { label = "13", id = 13},
-            { label = "14", id = 14},
-            { label = "15", id = 15},
-            { label = "16", id = 16},
-            { label = "17", id = 17},
-            { label = "18", id = 18},
-            { label = "19", id = 19},
-            { label = "20", id = 20},
-            { label = "21", id = 21},
-            { label = "22", id = 22},
-            { label = "23", id = 23},
-            { label = "24", id = 24},
-            { label = "25", id = 25},
-            { label = "26", id = 26},
-            { label = "27", id = 27},
-            { label = "28", id = 28},
-            { label = "29", id = 29},
-            { label = "30", id = 30},
-            { label = "31", id = 31},
-            { label = "32", id = 32},
-            { label = "33", id = 33},
-            { label = "34", id = 34},
-            { label = "35", id = 35},
-            { label = "36", id = 36},
-            { label = "37", id = 37},
-            { label = "38", id = 38},
-            { label = "39", id = 39},
-            { label = "40", id = 40},
-            { label = "41", id = 41},
-            { label = "42", id = 42},
-            { label = "43", id = 43},
-            { label = "44", id = 44},
+            { label = "Miscellaneous", id = 1},
+            { label = "Ammo", id = 2},
+            { label = "Arrows", id = 3},
+            { label = "Bolts", id = 4},
+            { label = "Construction materials", id = 5},
+            { label = "Construction products", id = 6},
+            { label = "Cooking ingredients", id = 7},
+            { label = "Costumes", id = 8},
+            { label = "Crafting materials", id = 9},
+            { label = "Familiars", id = 10},
+            { label = "Farming produce", id = 11},
+            { label = "Fletching materials", id = 12},
+            { label = "Food and drink", id = 13},
+            { label = "Herblore materials", id = 14},
+            { label = "Hunting equipment", id = 15},
+            { label = "Hunting produce", id = 16},
+            { label = "Jewellery", id = 17},
+            { label = "Mage armour", id = 18},
+            { label = "Mage weapons", id = 19},
+            { label = "Melee armour - low level", id = 20},
+            { label = "Melee armour - mid level", id = 21},
+            { label = "Melee armour - high level", id = 22},
+            { label = "Melee weapons - low level", id = 23},
+            { label = "Melee weapons - mid level", id = 24},
+            { label = "Melee weapons - high level", id = 25},
+            { label = "Mining and smithing", id = 26},
+            { label = "Potions", id = 27},
+            { label = "Prayer armour", id = 28},
+            { label = "Prayer materials", id = 29},
+            { label = "Range armour", id = 30},
+            { label = "Range weapons", id = 31},
+            { label = "Runecrafting", id = 32},
+            { label = "Runes, spells and teleports", id = 33},
+            { label = "Seeds", id = 34},
+            { label = "Summoning scrolls", id = 35},
+            { label = "Tools and containers", id = 36},
+            { label = "Woodcutting product", id = 37},
+            { label = "Pocket items", id = 38},
+            { label = "Stone spirits", id = 39},
+            { label = "Salvage", id = 40},
+            { label = "Firemaking products", id = 41},
+            { label = "Archaeology materials", id = 42},
+            { label = "Wood spirits", id = 43},
+            { label = "Necromancy armour", id = 44},
         },
         selectedID = 0,
-        onChange = function(combo, id, label)
-            if label == "" then
-                resetAllSlots()
+        onChange = function(combo, id, label, eventType)
+            if eventType ~= ui.SelectionChangeEvent.SELECTED then
+                return
             end
-            if id ~= tonumber(label) then
+            if id == 0 then
+                resetAllSlots()
                 return
             end
             destroyAllSlots()
@@ -181,11 +266,42 @@ function UI.load(game_window, setOfItemsAcquired)
         end,
     })
 
-    for id, _ in pairs(setOfItemsAcquired) do
-        local object = config.Obj.FromID(id)
-        addItemSlot(object)
-    end
-    resetAllSlots()
+    local iconButton = settingsWindow:AddSimpleButton(id.Sprite.CHAT_V2_FILTERS_ON_8, function()
+        destroyAllSlots()
+    end)
+
+    local alpha = 0.04
+    local leftButton = settingsWindow:AddSpriteButton("ARROW_LEFT", function()
+        if page == 1 then
+            return
+        end
+        page = page - 1
+        updatePageNumber()
+        addAllItemsFromPages()
+    end, {xAnchor = 0.4 - alpha})
+    pageNumber = settingsWindow:AddText({
+        text = "1",
+        inline = true,
+        xAnchor = 0.4
+    })
+    local rightButton = settingsWindow:AddSpriteButton("ARROW_RIGHT", function(self, enabled)
+        if pages[page + 1] == nil then
+            return
+        end
+        page = page+1
+        updatePageNumber()
+        addAllItemsFromPages()
+    end, {inline = true, xAnchor = 0.4 + alpha})
+
+    local divider = settingsWindow:AddDivider()
+
+    pages = createPages(setOfItemsAcquired)
+
+    page = 1
+
+    updatePageNumber()
+
+    addAllItemsFromPages()
 end
 
 function UI:addItemSlot(object)
