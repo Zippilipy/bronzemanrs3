@@ -5,25 +5,36 @@ local UI = require("ui")
 game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 
 -- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
+local setOfAllItems = {}
 PersistentDB:Clear()
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 if setOfItemsAcquired==nil then
     log("Persistent DB was nil!")
     setOfItemsAcquired = {}
-    for i=1,100000,1 do -- i = 1041 crashes
-        local object = config.Obj.FromID(i)
-        if object == nil then
-            goto continue
-        end
-        setOfItemsAcquired[i] = object.name
-        ::continue::
-    end
-    --setOfItemsAcquired[id.Obj.COINS] = true -- manually add coins to list
-    --setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = true -- manually add rocktail to list
+    setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = config.Obj.FromID(id.Obj.LRC_ROCKTAIL_COOKED).name -- manually add rocktail to list
+    setOfItemsAcquired[id.Obj.STRENGTH4] = config.Obj.FromID(id.Obj.STRENGTH4).name
+    setOfItemsAcquired[id.Obj._3DOSE1STRENGTH] = config.Obj.FromID(id.Obj._3DOSE1STRENGTH).name
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 
-UI.load(game_window, setOfItemsAcquired)
+for i=1,100000,1 do
+    local object = config.Obj.FromID(i)
+    if object == nil or not object.isStockmarket then
+        goto continue
+    end
+    local value = false
+    if setOfItemsAcquired[i] ~= nil then
+        value = true
+    end
+    setOfAllItems[i] = {
+        name = object.name,
+        obtained = value
+    }
+    ::continue::
+end
+
+UI.load(game_window, setOfItemsAcquired, setOfAllItems)
+
 
 -- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
 -- for each server tick, essentially making the collection log popup every 5 ticks.
@@ -32,21 +43,29 @@ local counterForCollectionPopup = 0
 -- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
 local collectionPopupQueue = Queue.new()
 
-local function addToAcquired(id, name, objType)
-    if setOfItemsAcquired[id] == nil then
-        setOfItemsAcquired[id] = true
-        log(string.format("%s added to obtained items!", name))
-        local collectionPopupItem = {
-            title = "Bronzeman log",
-            text = string.format("New item obtained: %s", name),
-            item = objType,
-            y = 50,
-        }
-        collectionPopupQueue:enqueue(collectionPopupItem)
-        PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-        local object = config.Obj.FromID(id)
-        UI:addItemSlot(object)
+local function standardPopup(object)
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = string.format("New item obtained: %s", object.name),
+        item = object,
+        y = 50,
+    }
+    return collectionPopupItem
+end
+
+local function addToAcquired(id, object, collectionPopupItem)
+    if object == nil or not object.isStockmarket then
+        return
     end
+    if setOfItemsAcquired[id] ~= nil then
+        return
+    end
+    setOfItemsAcquired[id] = object.name
+    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+    if collectionPopupItem ~= nil then
+        collectionPopupQueue:enqueue(collectionPopupItem)
+    end
+    UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
 end
 
 local function hasAcquired(id)
@@ -127,18 +146,82 @@ blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
     end
 )
 
--- Right now does nothing, but if I can consume events then this will consume any attempt to click 'loot'
-local function consumeIfNotObtainedLootOnGround(event)
-    local obj = event.entry.objData
-    if (obj == nil) then
+function miniMenuReadyFunc(event)
+    -- Make changes to the minimenu
+    local entries = event.miniMenu.entries
+    if entries == nil then
         return
     end
-    local id = obj.config.id
-    if not hasAcquired(id) then
-        log("Consumed!")
+    for _, entry in ipairs(entries) do
+        if entry.actionEntryType ~= MiniMenuEntryType.OBJ then
+            return
+        end
+        local object = entry.objData.config
+        if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
+            return
+        end
+        if not hasAcquired(object.id) then
+            log("hello")
+            local count = event.miniMenu.entryCount
+            if count > 1 then
+                -- Swap the highest priority entries
+                event.miniMenu:Swap(count - 1, count)
+            end
+        end
     end
 end
-Event.MiniMenuEntrySelected.Subscribe("minimenuEvent", consumeIfNotObtainedLootOnGround)
+Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
+
+local mouse_blocking_rectangle = ui.Rectangle.new(game_window)
+local side = 100
+--mouse_blocking_rectangle:SetPos(thing_to_be_blocked.position.x,thing_to_be_blocked.position.y)
+mouse_blocking_rectangle:SetSize(side,side)
+mouse_blocking_rectangle.clickthrough = true
+mouse_blocking_rectangle.colour = Vector4.new(0,0,0,0)
+mouse_blocking_rectangle.fill = true
+local isredtwo = false
+local function removeEntry(event)
+    if event.entry.actionEntryType == MiniMenuEntryType.OBJ then
+        local object = event.entry.objData.config
+        if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
+            return
+        end
+        if not hasAcquired(object.id) then
+            --don't allow you to pick it up
+            local position = Mouse.GetPosition()
+            if position == nil then
+                return
+            end
+            local x, y = position.x, position.y
+            mouse_blocking_rectangle:SetPos(x-side/2, y-side/2)
+            isredtwo = true
+            mouse_blocking_rectangle.clickthrough = false
+            mouse_blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
+        end
+    end
+end
+
+mouse_blocking_rectangle:Subscribe(ui.Hook.ONMOUSEREPEAT, "mouseEnterHook",
+    function (self)
+        if isredtwo then -- early return since this is a mouserepeat
+            return
+        end
+        if shouldConsumeAreaLoot() then
+            isredtwo = true
+            self.clickthrough = false
+            self.colour = Vector4.new(0.5,0,0,0.5)
+        end
+    end
+)
+mouse_blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
+    function (self)
+        isredtwo = false
+        self.clickthrough = true
+        self.colour = Vector4.new(0,0,0,0)
+    end
+)
+
+--Event.MiniMenuEntryAdded.Subscribe("removeEntry", removeEntry)
 
 -- addToItemAcquiredFromDrop and addToItemAcquiredFromDropChanged both add from items on the ground
 -- I need a way to check ownership of the drop, right now it just counts anything on the ground
@@ -270,6 +353,80 @@ local function shouldShowAreaLoot()
     end
 end
 Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)
+
+local function addAllItemsFromTheBank(event)
+    local bankconfig = event.inv
+    local count = 0
+    local bank = Inventory.Find(bankconfig)
+    if not bank.isValid then
+        return
+    end
+    local slots = bank:GetSlots()
+    for _, slot in ipairs(slots) do
+        local id = slot.obj.id
+        if id ~= -1 then
+            local object = slot.obj
+            if object ~= nil and object.isStockmarket then
+                if setOfItemsAcquired[id] == nil then
+                    count = count + 1
+                    setOfItemsAcquired[id] = slot.obj.name
+                end
+            end
+        end
+    end
+    if count == 0 then
+        return
+    end
+    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+    UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+    local text = string.format("%d new items added", count)
+    if count == 1 then
+        text = string.format("%d new item added", count)
+    end
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = text,
+        item = config.Obj.FromID(id.Obj.BANK_TUTOR_ICON_DUMMY),
+        y = 50,
+    }
+    collectionPopupQueue:enqueue(collectionPopupItem)
+end
+
+local function inventoryAddedSwitch(event)
+    local config = event.inv
+    if config.id == id.Inv.BANK then
+        addAllItemsFromTheBank(event)
+    end
+end
+
+Event.InventoryAdded.Subscribe("inventoryAddedSwitch", inventoryAddedSwitch)
+
+local function addAllItemsNewInTheInventory(event)
+    local invconfig = event.inv
+    local inv = Inventory.Find(invconfig)
+    if not inv.isValid then
+        return
+    end
+    local slots = {}
+    for _, slotid in ipairs(event.slotsUpdated) do
+        table.insert(slots, inv:GetSlot(slotid))
+    end
+    for _, slot in ipairs(slots) do
+        local id = slot.obj.id
+        if id ~= -1 then
+            addToAcquired(id, slot.obj, standardPopup(slot.obj))
+        end
+    end
+end
+
+local function inventoryUpdatedSwitch(event)
+    local config = event.inv
+    if config.id == id.Inv.INV then
+        addAllItemsNewInTheInventory(event)
+    end
+end
+
+Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitch)
 
 function PluginShutdown()
     if loot_all_component == nil then

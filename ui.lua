@@ -10,9 +10,15 @@ local page
 
 local pages = {}
 
+local sortedIds
+
+local sortedPosition
+
 local totalslots = {}
 
 local setOfItemsAcquired
+
+local setOfAllItems
 
 local pageNumber
 
@@ -35,11 +41,7 @@ local function addItemSlot(object)
         })
     end
     slot:SetObject(object)
-    totalslots[object.id] = {
-        slot = slot,
-        object = object,
-        category = object:GetParamValue(config.Param.FromID(2195)) + 1 -- 2195 is GE_CATEGORY, +1 is needed for some reason
-    }
+    totalslots[object.id] = slot
     counterForItemSlot = (counterForItemSlot + 1) % 12
     return slot
 end
@@ -47,34 +49,48 @@ end
 local function destroyAllSlots()
     counterForItemSlot = 0
     for key, value in pairs(totalslots) do
-        value.slot:Destroy()
+        value:Destroy()
         totalslots[key] = nil
     end
 end
 
 local function createPages(setOfItemsAcquiredParameter)
-    local sortedIds = {}
-    for id, _ in pairs(setOfItemsAcquiredParameter) do
-        table.insert(sortedIds, id)
-    end
-    table.sort(sortedIds, function(a, b)
-        local textA = setOfItemsAcquired[a]
-        local textB = setOfItemsAcquired[b]
-
-        local startsWithLetterA = string.match(textA, "^[A-Za-z]") ~= nil
-        local startsWithLetterB = string.match(textB, "^[A-Za-z]") ~= nil
-
-        if startsWithLetterA ~= startsWithLetterB then
-            return startsWithLetterA
+    if sortedIds == nil then
+        sortedIds = {}
+        sortedPosition = {}
+        for id, _ in pairs(setOfAllItems) do
+            table.insert(sortedIds, id)
         end
+        table.sort(sortedIds, function(a, b)
+            local textA = setOfAllItems[a].name
+            local textB = setOfAllItems[b].name
 
-        return string.lower(textA) < string.lower(textB)
+            local startsWithLetterA = string.match(textA, "^[A-Za-z]") ~= nil
+            local startsWithLetterB = string.match(textB, "^[A-Za-z]") ~= nil
+
+            if startsWithLetterA ~= startsWithLetterB then
+                return startsWithLetterA
+            end
+
+            return string.lower(textA) < string.lower(textB)
+        end)
+
+        for position, id in ipairs(sortedIds) do
+            sortedPosition[id] = position
+        end
+    end
+    local sorted = {}
+    for id, _ in pairs(setOfItemsAcquiredParameter) do
+        table.insert(sorted, id)
+    end
+    table.sort(sorted, function(a, b)
+        return sortedPosition[a] < sortedPosition[b]
     end)
     local page = 1
     local pages = {}
     pages[page] = {}
     local counterForNextPage = 0
-    for _, id in ipairs(sortedIds) do
+    for _, id in ipairs(sorted) do
         local object = config.Obj.FromID(id)
         if string.len(object.name) == 0 then
             goto continue
@@ -126,8 +142,9 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, count)
 end
 
-function UI.load(game_window, setOfItemsAcquiredParameter)
+function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
     setOfItemsAcquired = setOfItemsAcquiredParameter
+    setOfAllItems = setOfAllItemsParameter
     settingsWindow = prettyui.Window.new(game_window, {
         title = "Plugin settings",
         x = -210,
@@ -169,13 +186,18 @@ function UI.load(game_window, setOfItemsAcquiredParameter)
 
     local heading = settingsWindow:AddTitle(string.format("Your collected items: %d", count))
 
+    local previousText
     local search = settingsWindow:AddTextField({
         placeholder = "Bronze med helm",
         maxLength = 24,
         onChange = function(field, reason, text)
+            if text == previousText then -- no reason to do duplicate work
+                return
+            end
             if reason == 4 then -- when you click away from search I don't want to count that
                 return
             end
+            previousText = text
             page = 1
             if string.len(text) == 0 then
                 pages = createPages(setOfItemsAcquired)
@@ -251,24 +273,25 @@ function UI.load(game_window, setOfItemsAcquiredParameter)
             if eventType ~= ui.SelectionChangeEvent.SELECTED then
                 return
             end
+            page = 1
             if id == 0 then
-                resetAllSlots()
+                pages = createPages(setOfItemsAcquired)
+                updatePageNumber()
+                addAllItemsFromPages()
                 return
             end
-            destroyAllSlots()
-            local selectedslots = {}
-            for key, value in pairs(totalslots) do
-                if id == value.category then
-                    selectedslots[key] = value
+            local selectedSetOfItems = {}
+            for key, _ in pairs(setOfItemsAcquired) do
+                local object = config.Obj.FromID(key)
+                if id == object:GetParamValue(config.Param.FromID(2195)) + 1 then -- 2195 is GE_CATEGORY
+                    selectedSetOfItems[key] = object.name
                 end
             end
-            rebuildSlots(selectedslots)
+            pages = createPages(selectedSetOfItems)
+            updatePageNumber()
+            addAllItemsFromPages()
         end,
     })
-
-    local iconButton = settingsWindow:AddSimpleButton(id.Sprite.CHAT_V2_FILTERS_ON_8, function()
-        destroyAllSlots()
-    end)
 
     local alpha = 0.04
     local leftButton = settingsWindow:AddSpriteButton("ARROW_LEFT", function()
@@ -304,9 +327,12 @@ function UI.load(game_window, setOfItemsAcquiredParameter)
     addAllItemsFromPages()
 end
 
-function UI:addItemSlot(object)
-    addItemSlot(object)
-    resetAllSlots()
+function UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquiredParameter)
+    setOfItemsAcquired = setOfItemsAcquiredParameter
+    page = 1
+    pages = createPages(setOfItemsAcquired)
+    updatePageNumber()
+    addAllItemsFromPages()
 end
 
 return UI
