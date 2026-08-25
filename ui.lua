@@ -22,22 +22,24 @@ local setOfAllItems
 
 local pageNumber
 
-local function addItemSlot(object)
+local heading
+
+local function addItemSlot(object, name)
     if (settingsWindow == nil) then
         return
     end
-    if string.len(object.name) == 0 then
+    if string.len(name) == 0 then
         return
     end
     local slot = nil
     if counterForItemSlot ~= 0 then
         slot = settingsWindow:AddItemSlot(object, {
         inline = true,
-        tooltip = object.name,
+        tooltip = name,
         })
     else
         slot = settingsWindow:AddItemSlot(object, {
-        tooltip = object.name,
+        tooltip = name,
         })
     end
     slot:SetObject(object)
@@ -80,8 +82,10 @@ local function createPages(setOfItemsAcquiredParameter)
         end
     end
     local sorted = {}
-    for id, _ in pairs(setOfItemsAcquiredParameter) do
-        table.insert(sorted, id)
+    for id, name in pairs(setOfItemsAcquiredParameter) do
+        if string.len(name) ~= 0 then
+            table.insert(sorted, id)
+        end
     end
     table.sort(sorted, function(a, b)
         return sortedPosition[a] < sortedPosition[b]
@@ -91,10 +95,6 @@ local function createPages(setOfItemsAcquiredParameter)
     pages[page] = {}
     local counterForNextPage = 0
     for _, id in ipairs(sorted) do
-        local object = config.Obj.FromID(id)
-        if string.len(object.name) == 0 then
-            goto continue
-        end
         counterForNextPage = counterForNextPage + 1
         table.insert(pages[page], id)
         if counterForNextPage >= 120 then
@@ -102,7 +102,6 @@ local function createPages(setOfItemsAcquiredParameter)
             pages[page] = {}
             counterForNextPage = 0
         end
-        ::continue::
     end
     return pages
 end
@@ -111,7 +110,7 @@ local function addAllItemsFromPages()
     destroyAllSlots()
     for _, id in ipairs(pages[page]) do
         local object = config.Obj.FromID(id)
-        addItemSlot(object)
+        addItemSlot(object, setOfItemsAcquired[id])
     end
 end
 
@@ -135,11 +134,20 @@ local function resetAllSlots()
 end
 
 local function updatePageNumber()
-    local count = 0
-    for _ in pairs(pages) do
-        count = count + 1
+    local itemCount = 0
+
+    for _, name in pairs(setOfItemsAcquired) do
+        if name ~= "" then
+            itemCount = itemCount + 1
+        end
     end
-    pageNumber.content = string.format("%d/%d", page, count)
+
+    heading.content = string.format("Your collected items: %d", itemCount)
+    local pageCount = 0
+    for _ in pairs(pages) do
+        pageCount = pageCount + 1
+    end
+    pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
 function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
@@ -184,7 +192,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         count = count + 1
     end
 
-    local heading = settingsWindow:AddTitle(string.format("Your collected items: %d", count))
+    heading = settingsWindow:AddTitle(string.format("Your collected items: %d", count))
 
     local previousText
     local search = settingsWindow:AddTextField({
@@ -281,10 +289,10 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
                 return
             end
             local selectedSetOfItems = {}
-            for key, _ in pairs(setOfItemsAcquired) do
+            for key, name in pairs(setOfItemsAcquired) do
                 local object = config.Obj.FromID(key)
                 if id == object:GetParamValue(config.Param.FromID(2195)) + 1 then -- 2195 is GE_CATEGORY
-                    selectedSetOfItems[key] = object.name
+                    selectedSetOfItems[key] = name
                 end
             end
             pages = createPages(selectedSetOfItems)
