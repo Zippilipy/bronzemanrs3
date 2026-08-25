@@ -152,23 +152,26 @@ function miniMenuReadyFunc(event)
     if entries == nil then
         return
     end
-    for _, entry in ipairs(entries) do
+    local idxA = 0
+    local idxB = 0
+    for i, entry in pairs(entries) do
         if entry.actionEntryType ~= MiniMenuEntryType.OBJ then
-            return
+            goto continue
         end
         local object = entry.objData.config
         if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
-            return
+            goto continue
         end
         if not hasAcquired(object.id) then
-            log("hello")
-            local count = event.miniMenu.entryCount
-            if count > 1 then
-                -- Swap the highest priority entries
-                event.miniMenu:Swap(count - 1, count)
+            if entry.actionVerbType == 2 then
+                idxA = i
+            elseif entry.actionVerbType == 1 then
+                idxB = i
             end
         end
+        ::continue::
     end
+    event.miniMenu:Swap(idxA, idxB)
 end
 Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 
