@@ -291,7 +291,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
             local selectedSetOfItems = {}
             for key, name in pairs(setOfItemsAcquired) do
                 local object = config.Obj.FromID(key)
-                if id == object:GetParamValue(config.Param.FromID(2195)) + 1 then -- 2195 is GE_CATEGORY
+                if id == object:GetParamValue(config.Param.GE_CATEGORY) + 1 then
                     selectedSetOfItems[key] = name
                 end
             end

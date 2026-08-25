@@ -15,6 +15,16 @@ if setOfItemsAcquired==nil then
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 
+local c = config.Obj.CERT_1DOSE2RESTORE
+local p = c.params
+for key,v in pairs(p) do
+    log(v.configName)
+    log(c:GetParamValue(v))
+    if v.valueType == ValueType.OBJ then
+        log(v.configName)
+        log(c:GetParamValue(v))
+    end
+end
 for i=1,100000,1 do
     local object = config.Obj.FromID(i)
     if object == nil or not object.isStockmarket then
@@ -79,7 +89,8 @@ for index, id in pairs(doseLookup) do
     doseIndexById[id] = index
 end
 
-local function handlePotions(potionStruct, popup)
+local function handlePotions(potionStruct)
+    local isNewAddition = false
     local p = potionStruct.params
     local potionName = ""
     local bestPotionDoseNumber = -1
@@ -114,8 +125,11 @@ local function handlePotions(potionStruct, popup)
         bestNumber = bestBigPotionDoseNumber + 12
     end
     if bestNumber == -1 + 12 then
-        log("no best potion found!")
-        return
+        --log("no best potion found!")
+        return {
+            collectionPopupItem = nil,
+            isNewAddition = false
+        }
     end
     local bestPotionDoseNumberId = doseLookup[bestNumber]
     for _,v in ipairs(p) do
@@ -133,12 +147,12 @@ local function handlePotions(potionStruct, popup)
                     potionName = itemConfig
                 end
                 bestObject = objectConfig
-                setOfItemsAcquired[idConfig] = potionName
+                if setOfItemsAcquired[idConfig] == nil then
+                    setOfItemsAcquired[idConfig] = potionName
+                    isNewAddition = true
+                end
             end
         end
-    end
-    if not popup then
-        return
     end
     local collectionPopupItem = {
         title = "Bronzeman log",
@@ -146,7 +160,10 @@ local function handlePotions(potionStruct, popup)
         item = bestObject,
         y = 50,
     }
-    return collectionPopupItem
+    return {
+        collectionPopupItem = collectionPopupItem,
+        isNewAddition = isNewAddition
+    }
 end
 
 local function addToAcquired(id, object, collectionPopupItem, rebuild)
@@ -157,11 +174,14 @@ local function addToAcquired(id, object, collectionPopupItem, rebuild)
         return
     end
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
+    local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
     if potionStruct ~= nil then
-        local collectionPopup = handlePotions(potionStruct, true)
+        local collectionPopup = handlePotions(potionStruct).collectionPopupItem
         if collectionPopupItem ~= nil then
             collectionPopupQueue:enqueue(collectionPopup)
         end
+    elseif weaponStruct ~= nil then
+        log(string.format("Weapon Base/New OBJ ConfigName: %s", weaponStruct:GetParamValue(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM).configName))
     else
         setOfItemsAcquired[id] = object.name
         if collectionPopupItem ~= nil then
@@ -424,34 +444,36 @@ local function addAllItemsFromTheBank(event)
         local id = slot.obj.id
         if id ~= -1 then
             local object = slot.obj
-            if object ~= nil and object.isStockmarket then
-                if setOfItemsAcquired[id] == nil then
-                    local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
-                    count = count + 1
-                    if potionStruct then
-                        local count = 0
-                        for _, name in pairs(setOfItemsAcquired) do
-                            if name ~= "" then
-                                count = count + 1
-                            end
-                        end
-                        handlePotions(potionStruct)
-                        local newCount = 0
-                        for _, name in pairs(setOfItemsAcquired) do
-                            if name ~= "" then
-                                newCount = newCount + 1
-                            end
-                        end
-                        if count == newCount then
-                            log(slot.obj.name)
-                        end
-                    else
-                        setOfItemsAcquired[id] = slot.obj.name
-                        -- don't use addToAcquired because that many function calls make this way too slow
+            if object ~= nil then
+                if setOfItemsAcquired[id] ~= nil then
+                    goto continue
+                end
+                local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
+                if potionStruct then
+                    if handlePotions(potionStruct).isNewAddition then
+                        count = count + 1
                     end
+                elseif not object.isStockmarket then
+                    local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
+                    if weaponStruct ~= nil then
+                        local weaponNew = weaponStruct:HasParam(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) and weaponStruct:GetParamValue(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) or nil
+                        if weaponNew ~= nil then
+                            if weaponNew.isStockmarket then
+                                if setOfItemsAcquired[weaponNew.id] ~= nil then
+                                    count = count + 1
+                                    setOfItemsAcquired[weaponNew.id] = weaponNew.name
+                                end
+                            end
+                        end
+                    end
+                else
+                    count = count + 1
+                    setOfItemsAcquired[id] = slot.obj.name
+                    -- don't use addToAcquired because that many function calls make this way too slow
                 end
             end
         end
+    ::continue::
     end
     if count == 0 then
         return
@@ -465,7 +487,7 @@ local function addAllItemsFromTheBank(event)
     local collectionPopupItem = {
         title = "Bronzeman log",
         text = text,
-        item = config.Obj.FromID(id.Obj.BANK_TUTOR_ICON_DUMMY),
+        item = config.Obj.BANK_TUTOR_ICON_DUMMY,
         y = 50,
     }
     collectionPopupQueue:enqueue(collectionPopupItem)
@@ -493,6 +515,7 @@ local function addAllItemsNewInTheInventory(event)
     for _, slot in ipairs(slots) do
         local id = slot.obj.id
         if id ~= -1 then
+            log(id)
             addToAcquired(id, slot.obj, standardPopup(slot.obj), true)
         end
     end
