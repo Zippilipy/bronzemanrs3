@@ -2,7 +2,7 @@ local Queue = require("queue")
 local UI = require("ui")
 -- establish important global variables
 -- game window, is the game window
-game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 
 -- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
 local setOfAllItems = {}
@@ -11,20 +11,18 @@ local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 if setOfItemsAcquired==nil then
     log("Persistent DB was nil!")
     setOfItemsAcquired = {}
+    for i=1,100000,1 do
+        local object = config.Obj.FromID(i)
+        if object == nil or not object.isStockmarket then
+            goto continue
+        end
+        setOfItemsAcquired[i] = object.name
+        ::continue::
+    end
     setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = config.Obj.FromID(id.Obj.LRC_ROCKTAIL_COOKED).name -- manually add rocktail to list
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 
-local c = config.Obj.CERT_1DOSE2RESTORE
-local p = c.params
-for key,v in pairs(p) do
-    log(v.configName)
-    log(c:GetParamValue(v))
-    if v.valueType == ValueType.OBJ then
-        log(v.configName)
-        log(c:GetParamValue(v))
-    end
-end
 for i=1,100000,1 do
     local object = config.Obj.FromID(i)
     if object == nil or not object.isStockmarket then
@@ -95,6 +93,7 @@ local function handlePotions(potionStruct)
     local potionName = ""
     local bestPotionDoseNumber = -1
     local bestBigPotionDoseNumber = -1
+    local isExchangeable = false
     for _, v in ipairs(p) do
         if v.valueType ~= ValueType.OBJ then
             goto continue
@@ -107,6 +106,7 @@ local function handlePotions(potionStruct)
         if dose == nil then
             goto continue
         end
+        isExchangeable = true
         if dose <= 12 then
             if dose > bestPotionDoseNumber then
                 bestPotionDoseNumber = dose
@@ -125,7 +125,9 @@ local function handlePotions(potionStruct)
         bestNumber = bestBigPotionDoseNumber + 12
     end
     if bestNumber == -1 + 12 then
-        --log("no best potion found!")
+        if isExchangeable then
+            log("no best potion found!")
+        end
         return {
             collectionPopupItem = nil,
             isNewAddition = false
@@ -167,26 +169,31 @@ local function handlePotions(potionStruct)
 end
 
 local function addToAcquired(id, object, collectionPopupItem, rebuild)
-    if object == nil or not object.isStockmarket then
+    if object == nil then
+        return
+    end
+    local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
+    if potionStruct then
+        local potion = handlePotions(potionStruct)
+        if potion.isNewAddition then
+        local collectionPopup = potion.collectionPopupItem
+            if collectionPopupItem ~= nil then
+                collectionPopupQueue:enqueue(collectionPopup)
+            end
+        end
+        if rebuild then
+            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        end
+    end
+    if not object.isStockmarket then
         return
     end
     if setOfItemsAcquired[id] ~= nil then
         return
     end
-    local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
-    local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
-    if potionStruct ~= nil then
-        local collectionPopup = handlePotions(potionStruct).collectionPopupItem
-        if collectionPopupItem ~= nil then
-            collectionPopupQueue:enqueue(collectionPopup)
-        end
-    elseif weaponStruct ~= nil then
-        log(string.format("Weapon Base/New OBJ ConfigName: %s", weaponStruct:GetParamValue(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM).configName))
-    else
-        setOfItemsAcquired[id] = object.name
-        if collectionPopupItem ~= nil then
-            collectionPopupQueue:enqueue(collectionPopupItem)
-        end
+    setOfItemsAcquired[id] = object.name
+    if collectionPopupItem ~= nil then
+        collectionPopupQueue:enqueue(collectionPopupItem)
     end
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
     if rebuild then
@@ -200,6 +207,7 @@ end
 
 -- isRed is a boolean value that says whether it's red or not, this allows an early return on onMouseRepeat
 local isRed = false
+local isShowingAreaLoot = false
 
 -- Create a new box for components
 local myComponent = ui.GroupBox.new(game_window)
@@ -257,7 +265,7 @@ blocking_rectangle:Subscribe(ui.Hook.ONMOUSEREPEAT, "mouseEnterHook",
         if isRed then -- early return since this is a mouserepeat
             return
         end
-        if shouldConsumeAreaLoot() then
+        if shouldConsumeAreaLoot() and isShowingAreaLoot then
             isRed = true
             self.clickthrough = false
             self.colour = Vector4.new(0.5,0,0,0.5)
@@ -337,7 +345,7 @@ local function showAchievementPopup()
 Event.ServerLogic.Subscribe("showAchievementPopupEvent", showAchievementPopup)
 
 -- establish important variables for the shouldShowAreaLoot 
-local isShowing = true -- useful to prevent unnecessary actions
+local isShowingLootButton = true -- useful to prevent unnecessary actions
 local loot_all_component
 local loot_custom_component
 -- loot component is useful because if the player closes the menu and opens it again, that is a new component, 
@@ -350,7 +358,39 @@ local loot_custom_pos_x
 local loot_custom_pos_y
 
 local initialized = false
-local doubleinit = false
+
+local accept_button = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__ACCEPT_BUTTON_LAYER)
+local accept_button_x = 0
+local accept_button_y = 0
+if accept_button ~= nil then
+    accept_button_x = accept_button.x
+    accept_button_y = accept_button.y
+    accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
+end
+
+local initializeLootButtons = false
+local initializeAcceptButton = false
+local function initializeComponents()
+    if initializeAcceptButton then
+        accept_button = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__ACCEPT_BUTTON_LAYER)
+        accept_button_x = accept_button.x
+        accept_button_y = accept_button.y
+        initializeAcceptButton = false
+    end
+    if initializeLootButtons then
+        loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
+        loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
+        loot_all_pos_x = loot_all_component.x
+        loot_all_pos_y = loot_all_component.y
+        loot_custom_pos_x = loot_custom_component.x
+        loot_custom_pos_y = loot_custom_component.y
+        initializeLootButtons = false
+        initialized = true
+        isShowingLootButton = true
+    end
+end
+
+Event.ServerLogic.Subscribe("initializeComponents", initializeComponents)
 
 local hasHitADynamic = false
 local function isTheLootInterfaceOpen()
@@ -380,39 +420,32 @@ end
 -- if the loot interface is open as the plugin starts, then we can initialize immedietaly, instead of waiting
 -- for the user to open the loot interface
 if isTheLootInterfaceOpen() then
-    loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
-    loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
-    isShowing = true
-    if not initialized then
-        initialized = true
-    end
+    initializeLootButtons = true
+    isShowingAreaLoot = true
 end
 
-local function lootINV(event)
+local function lootInvOpened(event)
     if event.inv.id == id.Inv.LOOT then
-        loot_all_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_ALL_BUTTON_LAYER)
-        loot_custom_component = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2_LOOT__LOOT_CUSTOM_BUTTON_LAYER)
-        isShowing = true
-        if not initialized then
-            initialized = true
-        end
+        initialized = false
+        initializeLootButtons = true
+        isShowingAreaLoot = true
     end
 end
-Event.InventoryAdded.Subscribe("LootInvOpened", lootINV)
+Event.InventoryAdded.Subscribe("lootInvOpened", lootInvOpened)
+
+local function lootInvClosed(event)
+    if event.inv.id == id.Inv.LOOT then
+        isShowingAreaLoot = false
+    end
+end
+Event.InventoryRemoved.Subscribe("lootInvClosed", lootInvClosed)
 
 local function shouldShowAreaLoot()
     if not initialized then
         return
     end
-    if not doubleinit then -- this function will return the next tick after initialized is set to true
-        loot_all_pos_x = loot_all_component.x
-        loot_all_pos_y = loot_all_component.y
-        loot_custom_pos_x = loot_custom_component.x
-        loot_custom_pos_y = loot_custom_component.y
-        doubleinit = true
-    end
     local shouldShow = not shouldConsumeAreaLoot()
-    if isShowing then
+    if isShowingLootButton then
         if shouldShow then
             
         else
@@ -420,13 +453,13 @@ local function shouldShowAreaLoot()
             -- use the keyboard to activate the area loot button
             loot_all_component:SetPos(loot_all_component.position.x + 100, loot_all_component.position.y + 100)
             loot_custom_component:SetPos(loot_custom_component.position.x + 100, loot_custom_component.position.y + 100)
-            isShowing = false
+            isShowingLootButton = false
         end
     else
         if shouldShow then
             loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
             loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
-            isShowing = true
+            isShowingLootButton = true
         end
     end
 end
@@ -497,6 +530,8 @@ local function inventoryAddedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.BANK then
         addAllItemsFromTheBank(event)
+    elseif config.id == id.Inv.TRADEOFFER then
+        initializeAcceptButton = true
     end
 end
 
@@ -515,30 +550,48 @@ local function addAllItemsNewInTheInventory(event)
     for _, slot in ipairs(slots) do
         local id = slot.obj.id
         if id ~= -1 then
-            log(id)
             addToAcquired(id, slot.obj, standardPopup(slot.obj), true)
         end
     end
+end
+
+local function disableAcceptIfNotBond(event)
+    local tradeconfig = event.inv
+    local trade = Inventory.Find(tradeconfig)
+    if not trade.isValid then
+        return
+    end
+    for _, slot in ipairs(trade:GetSlots()) do
+        local itemId = slot.obj.id
+        if itemId ~= -1 and itemId ~= id.Obj.REDBERRIES then
+            accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
+            return
+        end
+    end
+    accept_button:SetPos(accept_button_x, accept_button_y)
 end
 
 local function inventoryUpdatedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.INV then
         addAllItemsNewInTheInventory(event)
+    elseif config.id == id.Inv.TRADEOFFER then
+        disableAcceptIfNotBond(event)
     end
 end
 
 Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitch)
 
 function PluginShutdown()
-    if loot_all_component == nil then
-        return
+    if loot_all_component ~= nil then
+        loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
     end
-    if loot_custom_component == nil then
-        return
+    if loot_custom_component ~= nil then
+        loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
     end
-    loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
-    loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
+    if accept_button ~= nil then
+        accept_button:SetPos(accept_button_x, accept_button_y)
+    end
 end
 
 local function printAllChildrens(input, static, level)

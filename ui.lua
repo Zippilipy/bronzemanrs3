@@ -35,11 +35,11 @@ local function addItemSlot(object, name)
     if counterForItemSlot ~= 0 then
         slot = settingsWindow:AddItemSlot(object, {
         inline = true,
-        tooltip = name,
+        tooltip = name
         })
     else
         slot = settingsWindow:AddItemSlot(object, {
-        tooltip = name,
+        tooltip = name
         })
     end
     slot:SetObject(object)
@@ -112,25 +112,6 @@ local function addAllItemsFromPages()
         local object = config.Obj.FromID(id)
         addItemSlot(object, setOfItemsAcquired[id])
     end
-end
-
-local function rebuildSlots(slots)
-    counterForItemSlot = 0
-    local keys = {}
-    for key, value in pairs(slots) do
-        table.insert(keys, key)
-    end
-    table.sort(keys)
-
-    for _, key in ipairs(keys) do
-        local value = slots[key]
-        addItemSlot(value.object)
-    end
-end
-
-local function resetAllSlots()
-    destroyAllSlots()
-    addAllItemsFromPages()
 end
 
 local function updatePageNumber()
@@ -228,7 +209,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         end,
     })
 
-    categories = settingsWindow:AddComboBox({
+    local categories = settingsWindow:AddComboBox({
         entries = {
             { label = "", id = 0},
             { label = "Miscellaneous", id = 1},
