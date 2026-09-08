@@ -3,61 +3,10 @@ local UI = require("ui")
 -- establish important global variables
 -- game window, is the game window
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-
 -- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
 local setOfAllItems = {}
 PersistentDB:Clear()
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
-if setOfItemsAcquired==nil then
-    log("Persistent DB was nil!")
-    setOfItemsAcquired = {}
-    for i=1,100000,1 do
-        local object = config.Obj.FromID(i)
-        if object == nil or not object.isStockmarket then
-            goto continue
-        end
-        setOfItemsAcquired[i] = object.name
-        ::continue::
-    end
-    setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = config.Obj.FromID(id.Obj.LRC_ROCKTAIL_COOKED).name -- manually add rocktail to list
-    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-end
-
-for i=1,100000,1 do
-    local object = config.Obj.FromID(i)
-    if object == nil or not object.isStockmarket then
-        goto continue
-    end
-    local value = false
-    if setOfItemsAcquired[i] ~= nil then
-        value = true
-    end
-    setOfAllItems[i] = {
-        name = object.name,
-        obtained = value
-    }
-    ::continue::
-end
-
-UI.load(game_window, setOfItemsAcquired, setOfAllItems)
-
-
--- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
--- for each server tick, essentially making the collection log popup every 5 ticks.
-local counterForCollectionPopup = 0
-
--- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
-local collectionPopupQueue = Queue.new()
-
-local function standardPopup(object)
-    local collectionPopupItem = {
-        title = "Bronzeman log",
-        text = string.format("New item obtained: %s", object.name),
-        item = object,
-        y = 50,
-    }
-    return collectionPopupItem
-end
 
 local doseLookup = {
     [1]  = config.Param.POTIONDOSES_1.id,
@@ -166,6 +115,145 @@ local function handlePotions(potionStruct)
         collectionPopupItem = collectionPopupItem,
         isNewAddition = isNewAddition
     }
+end
+
+local function handlePotionsForAllItems(potionStruct)
+    local isNewAddition = false
+    local p = potionStruct.params
+    local potionName = ""
+    local bestPotionDoseNumber = -1
+    local bestBigPotionDoseNumber = -1
+    local isExchangeable = false
+    for _, v in ipairs(p) do
+        if v.valueType ~= ValueType.OBJ then
+            goto continue
+        end
+        local objectConfig = potionStruct:GetParamValue(v)
+        if not objectConfig.isStockmarket then
+            goto continue
+        end
+        local dose = doseIndexById[v.id]
+        if dose == nil then
+            goto continue
+        end
+        isExchangeable = true
+        if dose <= 12 then
+            if dose > bestPotionDoseNumber then
+                bestPotionDoseNumber = dose
+            end
+        else
+            local bigDose = dose - 12 -- 13 - 18 <=> 1 - 6
+            if bigDose > bestBigPotionDoseNumber then
+                bestBigPotionDoseNumber = bigDose
+            end
+        end
+        ::continue::
+    end
+    local bestObject = nil
+    local bestNumber = bestPotionDoseNumber
+    if bestNumber == -1 then
+        bestNumber = bestBigPotionDoseNumber + 12
+    end
+    if bestNumber == -1 + 12 then
+        if isExchangeable then
+            log("no best potion found!")
+        end
+        return {
+            collectionPopupItem = nil,
+            isNewAddition = false
+        }
+    end
+    local bestPotionDoseNumberId = doseLookup[bestNumber]
+    for _,v in ipairs(p) do
+        if v.valueType == ValueType.OBJ then
+            local objectConfig = potionStruct:GetParamValue(v)
+            local idConfig = potionStruct:GetParamValue(v).id
+            local itemConfig = potionStruct:GetParamValue(v).name
+            local value = false
+            if setOfItemsAcquired[idConfig] ~= nil then
+                value = true
+            end
+            if v.id ~= bestPotionDoseNumberId then
+                if objectConfig.isStockmarket then
+                    setOfAllItems[idConfig] = {
+                        name = "",
+                        obtained = value
+                    }
+                end
+            else
+                potionName = itemConfig:match("^(.-)%s*%(%d+%)$")
+                if potionName == nil then
+                    potionName = itemConfig
+                end
+                bestObject = objectConfig
+                if setOfAllItems[idConfig] == nil then
+                    setOfAllItems[idConfig] = {
+                        name = potionName,
+                        obtained = value
+                    }
+                    isNewAddition = true
+                end
+            end
+        end
+    end
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = string.format("New item obtained: %s", potionName),
+        item = bestObject,
+        y = 50,
+    }
+    return {
+        collectionPopupItem = collectionPopupItem,
+        isNewAddition = isNewAddition
+    }
+end
+
+if setOfItemsAcquired==nil then
+    log("Persistent DB was nil!")
+    setOfItemsAcquired = {}
+    setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = config.Obj.FromID(id.Obj.LRC_ROCKTAIL_COOKED).name -- manually add rocktail to list
+    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+end
+
+for i=1,100000,1 do
+    local object = config.Obj.FromID(i)
+    if object == nil then
+        goto continue
+    end
+    local value = false
+    if setOfItemsAcquired[i] ~= nil then
+        value = true
+    end
+    local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
+    if potionStruct then
+        handlePotionsForAllItems(potionStruct)
+    elseif object.isStockmarket and setOfAllItems[i] == nil then
+        setOfAllItems[i] = {
+            name = object.name,
+            obtained = value
+        }
+    end
+    ::continue::
+end
+
+UI.load(game_window, setOfItemsAcquired, setOfAllItems)
+
+
+-- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
+-- for each server tick, essentially making the collection log popup every 5 ticks.
+local counterForCollectionPopup = 0
+
+-- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
+local collectionPopupQueue = Queue.new()
+
+local function standardPopup(object)
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = string.format("New item obtained: %s", object.name),
+        item = object,
+        y = 50,
+    }
+    return collectionPopupItem
 end
 
 local function addToAcquired(id, object, collectionPopupItem, rebuild)

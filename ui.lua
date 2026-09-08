@@ -24,7 +24,9 @@ local pageNumber
 
 local heading
 
-local function addItemSlot(object, name)
+local shouldShowUnobtainedItems = true
+
+local function addItemSlot(object, name, obtained)
     if (settingsWindow == nil) then
         return
     end
@@ -35,10 +37,12 @@ local function addItemSlot(object, name)
     if counterForItemSlot ~= 0 then
         slot = settingsWindow:AddItemSlot(object, {
         inline = true,
+        disabled = not obtained,
         tooltip = name
         })
     else
         slot = settingsWindow:AddItemSlot(object, {
+        disabled = not obtained,
         tooltip = name
         })
     end
@@ -82,13 +86,31 @@ local function createPages(setOfItemsAcquiredParameter)
         end
     end
     local sorted = {}
-    for id, name in pairs(setOfItemsAcquiredParameter) do
-        if string.len(name) ~= 0 then
-            table.insert(sorted, id)
+    if shouldShowUnobtainedItems then
+        for _, value in ipairs(sortedIds) do
+            if string.len(setOfAllItems[value].name) ~= 0 then
+                table.insert(sorted, value)
+            end
+        end
+    else
+        for id, name in pairs(setOfItemsAcquiredParameter) do
+            if string.len(name) ~= 0 then
+                table.insert(sorted, id)
+            end
         end
     end
+    local finalPosition = {}
+    local itemCount = 100000 -- arbitrarily high number that is more than the highest id
+    for _, id in ipairs(sorted) do
+        if id == 15272 then
+            log("hello")
+            log(sortedPosition[id])
+            log(setOfAllItems[id].obtained)
+        end
+        finalPosition[id] = sortedPosition[id] + (setOfAllItems[id].obtained and 0 or itemCount)
+    end
     table.sort(sorted, function(a, b)
-        return sortedPosition[a] < sortedPosition[b]
+        return finalPosition[a] < finalPosition[b]
     end)
     local page = 1
     local pages = {}
@@ -108,9 +130,16 @@ end
 
 local function addAllItemsFromPages()
     destroyAllSlots()
-    for _, id in ipairs(pages[page]) do
-        local object = config.Obj.FromID(id)
-        addItemSlot(object, setOfItemsAcquired[id])
+    if shouldShowUnobtainedItems then 
+        for _, id in ipairs(pages[page]) do
+            local object = config.Obj.FromID(id)
+            addItemSlot(object, setOfAllItems[id].name, setOfAllItems[id].obtained)
+        end
+    else
+        for _, id in ipairs(pages[page]) do
+            local object = config.Obj.FromID(id)
+            addItemSlot(object, setOfItemsAcquired[id], true)
+        end
     end
 end
 
