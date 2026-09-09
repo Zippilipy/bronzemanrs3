@@ -24,7 +24,30 @@ local pageNumber
 
 local heading
 
-local shouldShowUnobtainedItems = true
+local view2
+
+local settings = PersistentDB:Get("settings")
+if settings == nil then
+    log("Persistent DB for settings was nil!")
+    -- default settings
+    settings = {}
+    PersistentDB:Set("settings", settings)
+end
+
+local defaultSettings = {
+    shouldShowUnobtainedItems = "off",
+    pkingAllowed = "off",
+}
+
+for key, defaultValue in pairs(defaultSettings) do
+    if settings[key] == nil then
+        settings[key] = defaultValue
+    end
+end
+
+
+local shouldShowUnobtainedItems = settings["shouldShowUnobtainedItems"] == "on"
+local pkingAllowed = settings["pkingAllowed"] == "on"
 
 local function addItemSlot(object, name, obtained)
     if (settingsWindow == nil) then
@@ -35,13 +58,13 @@ local function addItemSlot(object, name, obtained)
     end
     local slot = nil
     if counterForItemSlot ~= 0 then
-        slot = settingsWindow:AddItemSlot(object, {
+        slot = view2:AddItemSlot(object, {
         inline = true,
         disabled = not obtained,
         tooltip = name
         })
     else
-        slot = settingsWindow:AddItemSlot(object, {
+        slot = view2:AddItemSlot(object, {
         disabled = not obtained,
         tooltip = name
         })
@@ -60,7 +83,7 @@ local function destroyAllSlots()
     end
 end
 
-local function createPages(setOfItemsAcquiredParameter)
+local function createPages(setOfItemsAcquiredParameter, useSetOfItemsEvenIfShowUnobtained)
     if sortedIds == nil then
         sortedIds = {}
         sortedPosition = {}
@@ -68,8 +91,8 @@ local function createPages(setOfItemsAcquiredParameter)
             table.insert(sortedIds, id)
         end
         table.sort(sortedIds, function(a, b)
-            local textA = setOfAllItems[a].name
-            local textB = setOfAllItems[b].name
+            local textA = setOfAllItems[a]
+            local textB = setOfAllItems[b]
 
             local startsWithLetterA = string.match(textA, "^[A-Za-z]") ~= nil
             local startsWithLetterB = string.match(textB, "^[A-Za-z]") ~= nil
@@ -86,9 +109,9 @@ local function createPages(setOfItemsAcquiredParameter)
         end
     end
     local sorted = {}
-    if shouldShowUnobtainedItems then
+    if shouldShowUnobtainedItems and not useSetOfItemsEvenIfShowUnobtained then
         for _, value in ipairs(sortedIds) do
-            if string.len(setOfAllItems[value].name) ~= 0 then
+            if string.len(setOfAllItems[value]) ~= 0 then
                 table.insert(sorted, value)
             end
         end
@@ -102,12 +125,7 @@ local function createPages(setOfItemsAcquiredParameter)
     local finalPosition = {}
     local itemCount = 100000 -- arbitrarily high number that is more than the highest id
     for _, id in ipairs(sorted) do
-        if id == 15272 then
-            log("hello")
-            log(sortedPosition[id])
-            log(setOfAllItems[id].obtained)
-        end
-        finalPosition[id] = sortedPosition[id] + (setOfAllItems[id].obtained and 0 or itemCount)
+        finalPosition[id] = sortedPosition[id] + (setOfItemsAcquired[id] ~= nil and 0 or itemCount)
     end
     table.sort(sorted, function(a, b)
         return finalPosition[a] < finalPosition[b]
@@ -133,7 +151,7 @@ local function addAllItemsFromPages()
     if shouldShowUnobtainedItems then 
         for _, id in ipairs(pages[page]) do
             local object = config.Obj.FromID(id)
-            addItemSlot(object, setOfAllItems[id].name, setOfAllItems[id].obtained)
+            addItemSlot(object, setOfAllItems[id], setOfItemsAcquired[id] ~= nil)
         end
     else
         for _, id in ipairs(pages[page]) do
@@ -160,19 +178,22 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
+local heightOfTabs = 0
+local height = 780
+local width = 640
 function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
     setOfItemsAcquired = setOfItemsAcquiredParameter
     setOfAllItems = setOfAllItemsParameter
     settingsWindow = prettyui.Window.new(game_window, {
-        title = "Plugin settings",
-        x = -210,
-        y = -150,
+        title = "Bronzeman Mode",
+        x = -320,
+        y = -height/2,
         xAnchor = 0.5,
         yAnchor = 0.5,
-        width = 420*2,
-        height = 300*2,
-        minWidth = 320*2,
-        minHeight = 220*2,
+        width = width,
+        height = height,
+        minWidth = width,
+        minHeight = height,
         scrollable = true,
         onClose = function(window)
             if itemRibbon ~= nil then
@@ -181,10 +202,22 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         end,
     })
 
-    settingsWindow:SetTitle("Bronzeman Mode")
-    settingsWindow:SetSize(460, 320)
     settingsWindow:Close()
 
+    local tabs = settingsWindow:AddTabs({
+        { text = "Collected items"},
+        { text = "Settings"},
+        { text = "About this plugin"},
+    }, {
+        height = height-70,
+        activeIndex = 1,
+        onChange = function(group, index, value, page)
+        end,
+    })
+
+    local collectedItemsTab = tabs:GetPage(1)
+    local settingsTab = tabs:GetPage(2)
+    local aboutThisPluginTab = tabs:GetPage(3)
         
     -- Inventory artwork can be used instead of a built-in sprite.
     itemRibbon = prettyui.RibbonBar.Register({
@@ -202,10 +235,21 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         count = count + 1
     end
 
-    heading = settingsWindow:AddTitle(string.format("Your collected items: %d", count))
+    local view1height = 130
+    local view3height = 90
+    local view2height = height - view3height - view1height - 60
+
+    local view1 = prettyui.SimpleView.new(collectedItemsTab.content, {
+        width = width - 20,
+        height = view1height,
+        y = heightOfTabs,
+        inline = true,
+    })
+
+    heading = view1:AddTitle(string.format("Your collected items: %d", count))
 
     local previousText
-    local search = settingsWindow:AddTextField({
+    local search = view1:AddTextField({
         placeholder = "Bronze med helm",
         maxLength = 24,
         onChange = function(field, reason, text)
@@ -218,29 +262,38 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
             previousText = text
             page = 1
             if string.len(text) == 0 then
-                pages = createPages(setOfItemsAcquired)
+                pages = createPages(setOfItemsAcquired, false)
                 updatePageNumber()
                 addAllItemsFromPages()
             else
                 destroyAllSlots()
-                local searchedSetOfItemsAcquired = {}
+                local searchedSetOfItems = {}
                 local searchText = string.lower(text)
-                for key, value in pairs(setOfItemsAcquired) do
-                    local valueText = string.lower(value)
-                    if string.find(valueText, searchText, 1, true) then
-                        searchedSetOfItemsAcquired[key] = value
+                if shouldShowUnobtainedItems then
+                    for key, name in pairs(setOfAllItems) do
+                        local valueText = string.lower(name)
+                        if string.find(valueText, searchText, 1, true) then
+                            searchedSetOfItems[key] = name
+                        end
+                    end
+                else
+                    for key, name in pairs(setOfItemsAcquired) do
+                        local valueText = string.lower(name)
+                        if string.find(valueText, searchText, 1, true) then
+                            searchedSetOfItems[key] = name
+                        end
                     end
                 end
-                pages = createPages(searchedSetOfItemsAcquired)
+                pages = createPages(searchedSetOfItems, true)
                 updatePageNumber()
                 addAllItemsFromPages()
             end
         end,
     })
 
-    local categories = settingsWindow:AddComboBox({
+    local categories = view1:AddComboBox({
         entries = {
-            { label = "", id = 0},
+            { label = "All items", id = 0},
             { label = "Miscellaneous", id = 1},
             { label = "Ammo", id = 2},
             { label = "Arrows", id = 3},
@@ -291,41 +344,64 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
             if eventType ~= ui.SelectionChangeEvent.SELECTED then
                 return
             end
+            log("hello")
             page = 1
             if id == 0 then
-                pages = createPages(setOfItemsAcquired)
+                pages = createPages(setOfItemsAcquired, false)
                 updatePageNumber()
                 addAllItemsFromPages()
                 return
             end
             local selectedSetOfItems = {}
-            for key, name in pairs(setOfItemsAcquired) do
-                local object = config.Obj.FromID(key)
-                if id == object:GetParamValue(config.Param.GE_CATEGORY) + 1 then
-                    selectedSetOfItems[key] = name
+            if shouldShowUnobtainedItems then 
+                for key, name in pairs(setOfAllItems) do
+                    local object = config.Obj.FromID(key)
+                    if id == object:GetParamValue(config.Param.GE_CATEGORY) + 1 then
+                        selectedSetOfItems[key] = name
+                    end
+                end
+            else
+                for key, name in pairs(setOfItemsAcquired) do
+                    local object = config.Obj.FromID(key)
+                    if id == object:GetParamValue(config.Param.GE_CATEGORY) + 1 then
+                        selectedSetOfItems[key] = name
+                    end
                 end
             end
-            pages = createPages(selectedSetOfItems)
+            pages = createPages(selectedSetOfItems, true)
             updatePageNumber()
             addAllItemsFromPages()
         end,
     })
 
+    view2 = prettyui.SimpleView.new(collectedItemsTab.content, {
+        width = width - 20,
+        height = view2height,
+        y = view1height + heightOfTabs,
+        scrollbarVisible = true,
+    })
+
+    local view3 = prettyui.SimpleView.new(collectedItemsTab.content, {
+        width = width - 20,
+        height = view3height,
+        y = view1height + view2height,
+    })
+
     local alpha = 0.04
-    local leftButton = settingsWindow:AddSpriteButton("ARROW_LEFT", function()
+    local leftButton = view3:AddSpriteButton("ARROW_LEFT", function()
         if page == 1 then
             return
         end
         page = page - 1
         updatePageNumber()
         addAllItemsFromPages()
-    end, {xAnchor = 0.4 - alpha})
-    pageNumber = settingsWindow:AddText({
+    end, {xAnchor = 0.4 - alpha/3})
+    pageNumber = view3:AddText({
         text = "1",
         inline = true,
         xAnchor = 0.4
     })
-    local rightButton = settingsWindow:AddSpriteButton("ARROW_RIGHT", function(self, enabled)
+    local rightButton = view3:AddSpriteButton("ARROW_RIGHT", function(self, enabled)
         if pages[page + 1] == nil then
             return
         end
@@ -334,21 +410,73 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         addAllItemsFromPages()
     end, {inline = true, xAnchor = 0.4 + alpha})
 
-    local divider = settingsWindow:AddDivider()
-
-    pages = createPages(setOfItemsAcquired)
+    pages = createPages(setOfItemsAcquired, false)
 
     page = 1
 
     updatePageNumber()
 
     addAllItemsFromPages()
+
+    local settingsView = prettyui.SimpleView.new(settingsTab.content, {
+        height = height-100,
+        width = width - 20
+    })
+
+    local shouldShowUnobtainedItemsDescription = settingsView:AddText("Show unobtained items? (may cause lag)", { inline = true })
+
+    local shouldShowUnobtainedItemsToggle = settingsView:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["shouldShowUnobtainedItems"],
+        onChange = function(group, value)
+            settings["shouldShowUnobtainedItems"] = value
+            shouldShowUnobtainedItems = value == "on"
+            PersistentDB:Set("settings", settings)
+            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        end,
+        inline = true,
+    })
+
+    local pkingAllowedDescription = settingsView:AddText("Should PKing unlock items? (currently does nothing)", { inline = true })
+
+    local pkingAllowedToggle = settingsView:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["pkingAllowed"],
+        onChange = function(group, value)
+            settings["pkingAllowed"] = value
+            pkingAllowed = value == "on"
+            PersistentDB:Set("settings", settings)
+        end,
+        inline = true,
+    })
+
+    local aboutThisPluginView = prettyui.SimpleView.new(aboutThisPluginTab.content, {
+        height = height-100,
+        width = width - 20
+    })
+
+    aboutThisPluginView:AddText("Welcome to Bronzeman Mode").font = 34
+    aboutThisPluginView:AddText("Features:").font = 32
+    aboutThisPluginView:AddText("1. Restricts buying from the Grand Exchange until the item has been unlocked, see below")
+    aboutThisPluginView:AddText("2. Restricts you from being able to pick up items that have not been unlocked")
+    aboutThisPluginView:AddText("3. Trading is disabled, except being able to be traded bonds, for unlocking membership")
+    aboutThisPluginView:AddText("What counts as an unlock?").font = 32
+    aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking if desired (see Settings)")
+    aboutThisPluginView:AddText("Items can be unlocked without requiring the level to normally obtain it through skilling")
+    aboutThisPluginView:AddText("This means you can unlock a potion that you don't have the skill level for")
+    aboutThisPluginView:AddText("Unlocking a potion unlocks all potion doses that are tradeable on the Grand Exchange")
+    aboutThisPluginView:AddText("Any item that is already in your bank will be automatically unlocked")
+    aboutThisPluginView:AddText("Any item that enters your inventory will be unlocked")
 end
 
 function UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquiredParameter)
     setOfItemsAcquired = setOfItemsAcquiredParameter
     page = 1
-    pages = createPages(setOfItemsAcquired)
+    pages = createPages(setOfItemsAcquired, false)
     updatePageNumber()
     addAllItemsFromPages()
 end

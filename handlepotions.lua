@@ -28,7 +28,18 @@ end
 
 local potionHandler = {}
 
-function potionHandler.handlePotions(potionStruct, setOfItemsAcquired)
+--- Finds the highest-dose potion and adds all stockmarket potionDoses to setOfItems
+--- Regular potion doses are prioritized over potion flasks
+--- Any potion that is stockmarket but is not the highest-dose will be given a empty string "" name
+--- This way, the item is still unlocked but will not be displayed
+--- Furthermore, the item that is the highest dose will be given the name of the potion without ()
+--- So a 'Super restore (4)' will actually be stored as 'Super restore'
+--- setOfItems[3024] = "Super restore (4)" will be made into setOfItems[3024] = "Super restore"
+--- setOfItems[3026] = "Super restore (3)" will be made into setOfItems[3026] = ""
+--- @param potionStruct POTION_STRUCT The potion struct parameter of the given item
+--- @param setOfItems table<number, string> Table of items, mapping the id of the item to the name
+--- @return { collectionPopupItem: table|nil, isNewAddition: boolean }
+function potionHandler.handlePotions(potionStruct, setOfItems)
     local isNewAddition = false
     local p = potionStruct.params
     local potionName = ""
@@ -82,7 +93,7 @@ function potionHandler.handlePotions(potionStruct, setOfItemsAcquired)
             local itemConfig = potionStruct:GetParamValue(v).name
             if v.id ~= bestPotionDoseNumberId then
                 if objectConfig.isStockmarket then
-                    setOfItemsAcquired[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
+                    setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
                 end
             else
                 potionName = itemConfig:match("^(.-)%s*%(%d+%)$")
@@ -90,99 +101,8 @@ function potionHandler.handlePotions(potionStruct, setOfItemsAcquired)
                     potionName = itemConfig
                 end
                 bestObject = objectConfig
-                if setOfItemsAcquired[idConfig] == nil then
-                    setOfItemsAcquired[idConfig] = potionName
-                    isNewAddition = true
-                end
-            end
-        end
-    end
-    local collectionPopupItem = {
-        title = "Bronzeman log",
-        text = string.format("New item obtained: %s", potionName),
-        item = bestObject,
-        y = 50,
-    }
-    return {
-        collectionPopupItem = collectionPopupItem,
-        isNewAddition = isNewAddition
-    }
-end
-
-function potionHandler.handlePotionsForAllItems(potionStruct, setOfItemsAcquired, setOfAllItems)
-    local isNewAddition = false
-    local p = potionStruct.params
-    local potionName = ""
-    local bestPotionDoseNumber = -1
-    local bestBigPotionDoseNumber = -1
-    local isExchangeable = false
-    for _, v in ipairs(p) do
-        if v.valueType ~= ValueType.OBJ then
-            goto continue
-        end
-        local objectConfig = potionStruct:GetParamValue(v)
-        if not objectConfig.isStockmarket then
-            goto continue
-        end
-        local dose = doseIndexById[v.id]
-        if dose == nil then
-            goto continue
-        end
-        isExchangeable = true
-        if dose <= 12 then
-            if dose > bestPotionDoseNumber then
-                bestPotionDoseNumber = dose
-            end
-        else
-            local bigDose = dose - 12 -- 13 - 18 <=> 1 - 6
-            if bigDose > bestBigPotionDoseNumber then
-                bestBigPotionDoseNumber = bigDose
-            end
-        end
-        ::continue::
-    end
-    local bestObject = nil
-    local bestNumber = bestPotionDoseNumber
-    if bestNumber == -1 then
-        bestNumber = bestBigPotionDoseNumber + 12
-    end
-    if bestNumber == -1 + 12 then
-        if isExchangeable then
-            log("no best potion found!")
-        end
-        return {
-            collectionPopupItem = nil,
-            isNewAddition = false
-        }
-    end
-    local bestPotionDoseNumberId = doseLookup[bestNumber]
-    for _,v in ipairs(p) do
-        if v.valueType == ValueType.OBJ then
-            local objectConfig = potionStruct:GetParamValue(v)
-            local idConfig = potionStruct:GetParamValue(v).id
-            local itemConfig = potionStruct:GetParamValue(v).name
-            local value = false
-            if setOfItemsAcquired[idConfig] ~= nil then
-                value = true
-            end
-            if v.id ~= bestPotionDoseNumberId then
-                if objectConfig.isStockmarket then
-                    setOfAllItems[idConfig] = {
-                        name = "",
-                        obtained = value
-                    }
-                end
-            else
-                potionName = itemConfig:match("^(.-)%s*%(%d+%)$")
-                if potionName == nil then
-                    potionName = itemConfig
-                end
-                bestObject = objectConfig
-                if setOfAllItems[idConfig] == nil then
-                    setOfAllItems[idConfig] = {
-                        name = potionName,
-                        obtained = value
-                    }
+                if setOfItems[idConfig] == nil then
+                    setOfItems[idConfig] = potionName
                     isNewAddition = true
                 end
             end

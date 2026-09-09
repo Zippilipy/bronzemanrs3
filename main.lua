@@ -5,37 +5,28 @@ local UI = require("ui")
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 -- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
 local setOfAllItems = {}
-PersistentDB:Clear()
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 
-if setOfItemsAcquired==nil then
-    log("Persistent DB was nil!")
+if setOfItemsAcquired == nil then
+    log("Persistent DB for setOfItemsAcquired was nil!")
     setOfItemsAcquired = {}
-    setOfItemsAcquired[id.Obj.LRC_ROCKTAIL_COOKED] = config.Obj.FromID(id.Obj.LRC_ROCKTAIL_COOKED).name -- manually add rocktail to list
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
-local handlePotionsForAllItems = potionHandler.handlePotionsForAllItems
 
+-- add all stockmarket items and stockmarket potiondoses (see handlepotions.lua) to setOfAllItems
 for i=1,70000,1 do
     local object = config.Obj.FromID(i)
     if object == nil then
         goto continue
     end
-    local value = false
-    if setOfItemsAcquired[i] ~= nil then
-        value = true
-    end
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
     if potionStruct then
-        handlePotionsForAllItems(potionStruct, setOfItemsAcquired, setOfAllItems)
+        handlePotions(potionStruct, setOfAllItems)
     elseif object.isStockmarket and setOfAllItems[i] == nil then
-        setOfAllItems[i] = {
-            name = object.name,
-            obtained = value
-        }
+        setOfAllItems[i] = object.name
     end
     ::continue::
 end
