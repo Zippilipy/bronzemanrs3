@@ -10,6 +10,7 @@ local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 if setOfItemsAcquired == nil then
     log("Persistent DB for setOfItemsAcquired was nil!")
     setOfItemsAcquired = {}
+    setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
 end
 

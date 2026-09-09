@@ -178,9 +178,8 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
-local heightOfTabs = 0
-local height = 780
-local width = 640
+local height = 745
+local width = 615
 function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
     setOfItemsAcquired = setOfItemsAcquiredParameter
     setOfAllItems = setOfAllItemsParameter
@@ -192,8 +191,6 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         yAnchor = 0.5,
         width = width,
         height = height,
-        minWidth = width,
-        minHeight = height,
         scrollable = true,
         onClose = function(window)
             if itemRibbon ~= nil then
@@ -235,16 +232,18 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         count = count + 1
     end
 
-    local view1height = 130
-    local view3height = 90
-    local view2height = height - view3height - view1height - 60
+    local view1height = 120
+    local view3height = 100
+    local view2height = 500
 
     local view1 = prettyui.SimpleView.new(collectedItemsTab.content, {
         width = width - 20,
         height = view1height,
-        y = heightOfTabs,
+        y = 0,
         inline = true,
     })
+    view1.scrollbarVisible = false
+    view1:SetScrollable(false)
 
     heading = view1:AddTitle(string.format("Your collected items: %d", count))
 
@@ -377,14 +376,14 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
     view2 = prettyui.SimpleView.new(collectedItemsTab.content, {
         width = width - 20,
         height = view2height,
-        y = view1height + heightOfTabs,
+        y = view1height,
         scrollbarVisible = true,
     })
 
     local view3 = prettyui.SimpleView.new(collectedItemsTab.content, {
         width = width - 20,
         height = view3height,
-        y = view1height + view2height,
+        y = view1height + view2height - 20,
     })
 
     local alpha = 0.04
