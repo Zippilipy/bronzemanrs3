@@ -422,7 +422,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         width = width - 20
     })
 
-    local shouldShowUnobtainedItemsDescription = settingsView:AddText("Show unobtained items? (may cause lag)", { inline = true })
+    local shouldShowUnobtainedItemsDescription = settingsView:AddText("Show unobtained items? (may cause lag when searching)", { inline = true })
 
     local shouldShowUnobtainedItemsToggle = settingsView:AddRadioButton({
         { text = "On", value = "on" },

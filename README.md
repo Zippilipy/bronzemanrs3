@@ -26,8 +26,8 @@ Any item that you do own you can pick up, and if you don't have ownership but yo
 
 ### Blocker -- Disable the 'take' option on ground items you do not have ownership of
 If you don't have ownership but you have obtained it previously, you are allowed to pick it up
-### Blocker -- Disable any item in the grand exchange that you have not obtained
-The grand exchange is currently disabled on the beta worlds, so this cannot be done right now.
+### Completed -- Disable any item in the grand exchange that you have not obtained
+Done!
 ### Completed -- Disable accepting any trade with a player
 Originally, this was disable trade if they gave you an item you didn't have access to, but I don't think I should have trade enabled at all, since it doesn't seem very bronzeman to be able to be given stuff, even if you unlocked it (like let's say someone tries to give you 100m, that shouldn't work imo). The only exception is bonds, bonds should be tradeable to allow someone to give themselves membership with bonds. So basically, disable the "accept button" for any item that isn't a bond.
 ### Completed -- Add text explaining the gamemode

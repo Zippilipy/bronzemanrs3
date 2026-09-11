@@ -328,6 +328,9 @@ local function shouldShowAreaLoot()
     if not initialized then
         return
     end
+    if not isShowingAreaLoot then
+        return
+    end
     local shouldShow = not shouldConsumeAreaLoot()
     if isShowingLootButton then
         if shouldShow then
@@ -466,23 +469,24 @@ end
 
 Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitch)
 
-function PluginShutdown()
-    if loot_all_component ~= nil then
-        loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
-    end
-    if loot_custom_component ~= nil then
-        loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
-    end
-    if accept_button ~= nil then
-        accept_button:SetPos(accept_button_x, accept_button_y)
-    end
-end
-
 local function printAllChildrens(input, static, level)
     if static then
         input:IterateStaticComponents(
             function (component, visible)
                 log(string.format("Found static component with id: %d type: %d at level: %d, visibility: %s", component.staticID, component.type, level, tostring(visible)))
+                if component.type == 2 then
+
+                end
+                if component.type == 3 then
+                    local id = component.associatedObjectID
+                    if id ~= -1 then
+                        if setOfItemsAcquired[id] ~= nil then
+                            log(string.format("You are allowed to buy %s", config.Obj.FromID(id).name))
+                        else
+                            log(string.format("You are NOT allowed to buy %s", config.Obj.FromID(id).name))
+                        end
+                    end
+                end
                 if component.type == 20 then
                     printAllChildrens(component, true, level+1)
                     printAllChildrens(component, false, level+1)
@@ -495,5 +499,70 @@ local function printAllChildrens(input, static, level)
                 log(string.format("Found dynamic component with id: %d type: %d at level: %d, visibility: %s", component.dynamicID, component.type, level, tostring(visible)))
             return false
             end)
+    end
+end
+
+local stockmarketthingy = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
+local confirm_button_initialized = false
+local confirm_button_visible = true
+local confirm_button_click
+local confirm_button_build
+local confirm_button_click_x
+local confirm_button_click_y
+local confirm_button_build_x
+local confirm_button_build_y
+
+local function printSelectedItem()
+    local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE):GetChild(227)
+    local selectedid = itemCurrentlyBeingSelected.associatedObjectID
+    if selectedid ~= -1 then
+        if not confirm_button_initialized then
+            confirm_button_click = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__MAKEOFFERBUTTON_CLICK)
+            confirm_button_build = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__MAKEOFFERBUTTON_BUILD)
+            confirm_button_click_x = confirm_button_click.position.x
+            confirm_button_click_y = confirm_button_click.position.y
+            confirm_button_build_x = confirm_button_build.position.x
+            confirm_button_build_y = confirm_button_build.position.y
+            confirm_button_initialized = true
+        end
+        if setOfItemsAcquired[selectedid] ~= nil then
+            if not confirm_button_visible and confirm_button_initialized then
+                confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
+                confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
+                confirm_button_visible = true
+            end
+        else
+            if confirm_button_visible and confirm_button_initialized then
+                confirm_button_click:SetPos(confirm_button_click.position.x + 500, confirm_button_click.position.y + 500)
+                confirm_button_build:SetPos(confirm_button_build.position.x + 500, confirm_button_build.position.y + 500)
+                confirm_button_visible = false
+            end
+        end
+    else
+        if not confirm_button_visible and confirm_button_initialized then
+            confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
+            confirm_button_click:SetPos(confirm_button_build_x, confirm_button_build_y)
+            confirm_button_visible = true
+        end
+    end
+end
+
+Event.ServerLogic.Subscribe("printSelectedItem", printSelectedItem)
+
+function PluginShutdown()
+    if loot_all_component ~= nil then
+        loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
+    end
+    if loot_custom_component ~= nil then
+        loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
+    end
+    if accept_button ~= nil then
+        accept_button:SetPos(accept_button_x, accept_button_y)
+    end
+    if confirm_button_click ~= nil then
+        confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
+    end
+    if confirm_button_build ~= nil then
+        confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
     end
 end
