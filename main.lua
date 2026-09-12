@@ -26,7 +26,7 @@ for i=1,70000,1 do
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
     if potionStruct then
         handlePotions(potionStruct, setOfAllItems)
-    elseif object.isStockmarket and setOfAllItems[i] == nil then
+    elseif object.isTradeable and setOfAllItems[i] == nil then
         setOfAllItems[i] = object.name
     end
     ::continue::
@@ -58,7 +58,7 @@ local function addToAcquired(id, object, collectionPopupItem)
         UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
         return
     end
-    if not object.isStockmarket then
+    if not object.isTradeable then
         return
     end
     if setOfItemsAcquired[id] ~= nil then
@@ -115,7 +115,7 @@ local function shouldConsumeAreaLoot()
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
         local acquired = setOfItemsAcquired[id] ~= nil
-        if not acquired and config.Obj.FromID(id).isStockmarket then
+        if not acquired and config.Obj.FromID(id).isTradeable then
             return true
         end
     end
@@ -156,7 +156,7 @@ function miniMenuReadyFunc(event)
             goto continue
         end
         local object = entry.objData.config
-        if (object.isTradeable and not object.isStockmarket) then -- you should be able to pick up your own untradeable stuff
+        if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
             goto continue
         end
         if setOfItemsAcquired[object.id] == nil then
@@ -352,12 +352,12 @@ local function addAllItemsFromTheBank(event)
                     if handlePotions(potionStruct, setOfItemsAcquired).isNewAddition then
                         count = count + 1
                     end
-                elseif not object.isStockmarket then
+                elseif not object.isTradeable then
                     local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
                     if weaponStruct ~= nil then
                         local weaponNew = weaponStruct:HasParam(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) and weaponStruct:GetParamValue(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) or nil
                         if weaponNew ~= nil then
-                            if weaponNew.isStockmarket then
+                            if weaponNew.isTradeable then
                                 if setOfItemsAcquired[weaponNew.id] ~= nil then
                                     count = count + 1
                                     setOfItemsAcquired[weaponNew.id] = weaponNew.name
