@@ -42,17 +42,7 @@ local counterForCollectionPopup = 0
 -- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
 local collectionPopupQueue = Queue.new()
 
-local function standardPopup(object)
-    local collectionPopupItem = {
-        title = "Bronzeman log",
-        text = string.format("New item obtained: %s", object.name),
-        item = object,
-        y = 50,
-    }
-    return collectionPopupItem
-end
-
-local function addToAcquired(id, object, collectionPopupItem, rebuild)
+local function addToAcquired(id, object, collectionPopupItem)
     if object == nil then
         return
     end
@@ -65,9 +55,8 @@ local function addToAcquired(id, object, collectionPopupItem, rebuild)
                 collectionPopupQueue:enqueue(collectionPopup)
             end
         end
-        if rebuild then
-            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
-        end
+        UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        return
     end
     if not object.isStockmarket then
         return
@@ -80,27 +69,17 @@ local function addToAcquired(id, object, collectionPopupItem, rebuild)
         collectionPopupQueue:enqueue(collectionPopupItem)
     end
     PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-    if rebuild then
-        UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
-    end
-end
-
-local function hasAcquired(id)
-    return setOfItemsAcquired[id] ~= nil
+    UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
 end
 
 -- isRed is a boolean value that says whether it's red or not, this allows an early return on onMouseRepeat
 local isRed = false
 local isShowingAreaLoot = false
 
--- Create a new box for components
-local myComponent = ui.GroupBox.new(game_window)
-local thing_to_be_blocked = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW)
-
--- rectangle to block interaction
+local loot_inventory = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW)
 local blocking_rectangle = ui.Rectangle.new(game_window)
-blocking_rectangle:SetPos(thing_to_be_blocked.position.x,thing_to_be_blocked.position.y)
-blocking_rectangle:SetSize(thing_to_be_blocked.size.width,thing_to_be_blocked.size.height)
+blocking_rectangle:SetPos(loot_inventory.position.x,loot_inventory.position.y)
+blocking_rectangle:SetSize(loot_inventory.size.width,loot_inventory.size.height)
 blocking_rectangle.clickthrough = true
 blocking_rectangle.colour = Vector4.new(0,0,0,0)
 blocking_rectangle.fill = true
@@ -135,7 +114,7 @@ end
 local function shouldConsumeAreaLoot()
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
-        local acquired = hasAcquired(id)
+        local acquired = setOfItemsAcquired[id] ~= nil
         if not acquired then
             return true
         end
@@ -180,7 +159,7 @@ function miniMenuReadyFunc(event)
         if (object.isTradeable and not object.isStockmarket) then -- you should be able to pick up your own untradeable stuff
             goto continue
         end
-        if not hasAcquired(object.id) then
+        if setOfItemsAcquired[object.id] == nil then
             if entry.actionVerbType == 2 then
                 idxA = i
             elseif entry.actionVerbType == 1 then
@@ -437,7 +416,13 @@ local function addAllItemsNewInTheInventory(event)
     for _, slot in ipairs(slots) do
         local id = slot.obj.id
         if id ~= -1 then
-            addToAcquired(id, slot.obj, standardPopup(slot.obj), true)
+            local collectionPopupItem = {
+                title = "Bronzeman log",
+                text = string.format("New item obtained: %s", slot.obj.name),
+                item = slot.obj,
+                y = 50,
+            }
+            addToAcquired(id, slot.obj, collectionPopupItem)
         end
     end
 end
@@ -474,10 +459,7 @@ local function printAllChildrens(input, static, level)
         input:IterateStaticComponents(
             function (component, visible)
                 log(string.format("Found static component with id: %d type: %d at level: %d, visibility: %s", component.staticID, component.type, level, tostring(visible)))
-                if component.type == 2 then
-
-                end
-                if component.type == 3 then
+                if component.type == ui.ComponentType.SPRITE then
                     local id = component.associatedObjectID
                     if id ~= -1 then
                         if setOfItemsAcquired[id] ~= nil then
@@ -487,7 +469,7 @@ local function printAllChildrens(input, static, level)
                         end
                     end
                 end
-                if component.type == 20 then
+                if component.type == ui.ComponentType.LAYER then
                     printAllChildrens(component, true, level+1)
                     printAllChildrens(component, false, level+1)
                 end
@@ -502,7 +484,6 @@ local function printAllChildrens(input, static, level)
     end
 end
 
-local stockmarketthingy = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
 local confirm_button_initialized = false
 local confirm_button_visible = true
 local confirm_button_click
@@ -512,7 +493,22 @@ local confirm_button_click_y
 local confirm_button_build_x
 local confirm_button_build_y
 
-local function printSelectedItem()
+local gigastring = ""
+
+for i = 0, 0, 1 do
+    gigastring = gigastring .. string.format("<img=%d>", i)
+end
+
+local pluginresource = Plugin.resources.images.icon.bronzemanicon
+pluginresource:Load()
+
+local icon = ui.Sprite.new(game_window)
+icon:SetSize(14, 14)
+icon.sprite = pluginresource
+
+ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME).content = "<testsprite>" .. ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME).content
+
+local function disableConfirmButton()
     local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE):GetChild(227)
     local selectedid = itemCurrentlyBeingSelected.associatedObjectID
     if selectedid ~= -1 then
@@ -547,7 +543,7 @@ local function printSelectedItem()
     end
 end
 
-Event.ServerLogic.Subscribe("printSelectedItem", printSelectedItem)
+Event.ServerLogic.Subscribe("disableConfirmButton", disableConfirmButton)
 
 function PluginShutdown()
     if loot_all_component ~= nil then
