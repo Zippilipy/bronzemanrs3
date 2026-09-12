@@ -115,7 +115,7 @@ local function shouldConsumeAreaLoot()
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
         local acquired = setOfItemsAcquired[id] ~= nil
-        if not acquired then
+        if not acquired and config.Obj.FromID(id).isStockmarket then
             return true
         end
     end
@@ -493,23 +493,13 @@ local confirm_button_click_y
 local confirm_button_build_x
 local confirm_button_build_y
 
-local gigastring = ""
-
-for i = 0, 0, 1 do
-    gigastring = gigastring .. string.format("<img=%d>", i)
-end
-
-local pluginresource = Plugin.resources.images.icon.bronzemanicon
-pluginresource:Load()
-
-local icon = ui.Sprite.new(game_window)
-icon:SetSize(14, 14)
-icon.sprite = pluginresource
-
-ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME).content = "<testsprite>" .. ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME).content
-
 local function disableConfirmButton()
-    local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE):GetChild(227)
+    local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
+    if itemCurrentlyBeingSelected == nil then
+        return
+    else
+        itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(227)
+    end
     local selectedid = itemCurrentlyBeingSelected.associatedObjectID
     if selectedid ~= -1 then
         if not confirm_button_initialized then
@@ -561,4 +551,5 @@ function PluginShutdown()
     if confirm_button_build ~= nil then
         confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
     end
+    UI:resetIconStuff()
 end

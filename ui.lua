@@ -37,6 +37,7 @@ end
 local defaultSettings = {
     shouldShowUnobtainedItems = "off",
     pkingAllowed = "off",
+    showIcon = "on",
 }
 
 for key, defaultValue in pairs(defaultSettings) do
@@ -48,6 +49,85 @@ end
 
 local shouldShowUnobtainedItems = settings["shouldShowUnobtainedItems"] == "on"
 local pkingAllowed = settings["pkingAllowed"] == "on"
+local showIcon = settings["showIcon"] == "on"
+
+local pluginresource = Plugin.resources.images.icon.bronzemanicon
+pluginresource:Load()
+
+local chats = {
+    [1] = id.Component.CHATDEFAULT__PLAYER_NAME,
+    [2] = id.Component.CHATDEFAULT2__PLAYER_NAME,
+    [3] = id.Component.CHATDEFAULT3__PLAYER_NAME,
+    [4] = id.Component.CHATDEFAULT4__PLAYER_NAME,
+    [5] = id.Component.CHATDEFAULT5__PLAYER_NAME,
+    [6] = id.Component.CHATDEFAULT6__PLAYER_NAME,
+    [8] = id.Component.CHATDEFAULT8__PLAYER_NAME,
+}
+
+local input = {
+    [1] = id.Component.CHATDEFAULT__INPUTAREA,
+    [2] = id.Component.CHATDEFAULT2__INPUTAREA,
+    [3] = id.Component.CHATDEFAULT3__INPUTAREA,
+    [4] = id.Component.CHATDEFAULT4__INPUTAREA,
+    [5] = id.Component.CHATDEFAULT5__INPUTAREA,
+    [6] = id.Component.CHATDEFAULT6__INPUTAREA,
+    [8] = id.Component.CHATDEFAULT8__INPUTAREA,
+}
+
+local names = {}
+
+local inputfields = {}
+
+local pluginresource = Plugin.resources.images.icon.bronzemanicon
+pluginresource:Load()
+
+local function bronzemanIcon()
+    for _, value in pairs(names) do
+        if value.component.x == value.x then
+            value.component:SetPos(value.x + 9, value.y)
+        end
+    end
+    for _, value in pairs(inputfields) do
+        if value.component.x == value.x then
+            value.component:SetPos(value.x + 9, value.y)
+        end
+    end
+end
+
+local function addIconStuff()
+    for key, value in pairs(chats) do
+        local comp = ui.Interfaces:GetComponent(value)
+        local icon = ui.Sprite.new(comp.parent)
+        icon:SetSize(9, 11)
+        icon.sprite = pluginresource
+        icon:SetPos(comp.x, comp.y+7)
+        names[key] = {component = comp, x = comp.x, y = comp.y, icon = icon}
+    end
+
+    for key, value in pairs(input) do
+        local comp = ui.Interfaces:GetComponent(value)
+        inputfields[key] = {component = comp, x = comp.x, y = comp.y}
+    end
+end
+
+local function resetIconStuff()
+    for _, value in pairs(names) do
+        if value.component.x ~= value.x then
+            value.component:SetPos(value.x, value.y)
+        end
+        value.icon:Destroy()
+    end
+    for _, value in pairs(inputfields) do
+        if value.component.x ~= value.x then
+            value.component:SetPos(value.x, value.y)
+        end
+    end
+end
+
+if showIcon then
+    addIconStuff()
+    Event.Draw.Subscribe("bronzemanIcon", bronzemanIcon)
+end
 
 local function addItemSlot(object, name, obtained)
     if (settingsWindow == nil) then
@@ -453,17 +533,39 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         inline = true,
     })
 
+    local showIconDescription = settingsView:AddText("Show Bronzeman icon?", {inline = true})
+
+    local showIconToggle = settingsView:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["showIcon"],
+        onChange = function(group, value)
+            settings["showIcon"] = value
+            showIcon = value == "on"
+            PersistentDB:Set("settings", settings)
+            if showIcon then
+                addIconStuff()
+                Event.Draw.Subscribe("bronzemanIcon", bronzemanIcon)
+            else
+                Event.Draw.Unsubscribe("bronzemanIcon")
+                resetIconStuff()
+            end
+        end,
+        inline = true,
+    })
+
     local aboutThisPluginView = prettyui.SimpleView.new(aboutThisPluginTab.content, {
         height = height-100,
         width = width - 20
     })
 
-    aboutThisPluginView:AddText("Welcome to Bronzeman Mode").font = 34
-    aboutThisPluginView:AddText("Features:").font = 32
+    aboutThisPluginView:AddText("Welcome to Bronzeman Mode").font = id.Font.MUSEO_SANS_19PT_BOLD
+    aboutThisPluginView:AddText("Features:").font = id.Font.MUSEO_SANS_17PT_BOLD
     aboutThisPluginView:AddText("1. Restricts buying from the Grand Exchange until the item has been unlocked, see below")
     aboutThisPluginView:AddText("2. Restricts you from being able to pick up items that have not been unlocked")
     aboutThisPluginView:AddText("3. Trading is disabled, except being able to be traded bonds, for unlocking membership")
-    aboutThisPluginView:AddText("What counts as an unlock?").font = 32
+    aboutThisPluginView:AddText("What counts as an unlock?").font = id.Font.MUSEO_SANS_17PT_BOLD
     aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking if desired (see Settings)")
     aboutThisPluginView:AddText("Items can be unlocked without requiring the level to normally obtain it through skilling")
     aboutThisPluginView:AddText("This means you can unlock a potion that you don't have the skill level for")
@@ -478,6 +580,10 @@ function UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquiredParameter)
     pages = createPages(setOfItemsAcquired, false)
     updatePageNumber()
     addAllItemsFromPages()
+end
+
+function UI:resetIconStuff()
+    resetIconStuff()
 end
 
 return UI
