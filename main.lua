@@ -1,9 +1,11 @@
+--PersistentDB:Clear()
 local Queue = require("queue")
 local UI = require("ui")
 -- establish important global variables
 -- game window, is the game window
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
--- setOfItemsAcquired is a table mapping ids to true or nil, true means you have acquired said item, nil means you haven't
+-- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said itexxm, nil means you haven't
+-- for a more in depth description of setOfItemsAcquired, see handlepotions.lua
 local setOfAllItems = {}
 local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
 
@@ -46,6 +48,9 @@ local function addToAcquired(id, object, collectionPopupItem)
     if object == nil then
         return
     end
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
     if potionStruct then
         local potion = handlePotions(potionStruct, setOfItemsAcquired)
@@ -62,6 +67,11 @@ local function addToAcquired(id, object, collectionPopupItem)
         return
     end
     if setOfItemsAcquired[id] ~= nil then
+        return
+    end
+    if not object.isStockmarket then -- tradeables that aren't g.e. shouldn't be displayed but they should be added
+        setOfItemsAcquired[id] = ""
+        PersistentDB:Set("acquiredItems",setOfItemsAcquired)
         return
     end
     setOfItemsAcquired[id] = object.name
@@ -88,11 +98,11 @@ blocking_rectangle.fill = true
 -- returns a list of item ids, the same type of ids stored in setOfItemsAcquired
 local function findAllNearbyItemIds()
     local nearbyItemIds = {}
-    local self = Player.GetEntity()
-    if self == nil then 
+    local player = Player.GetEntity()
+    if player == nil then 
         return nearbyItemIds
     end
-    local coordGrid = self.coordGrid
+    local coordGrid = player.coordGrid
     local allObjects = ObjStackList.ByDistance(coordGrid, 11) -- area loot is 7 tiles
     if #allObjects == 0 then 
         return nearbyItemIds
@@ -112,10 +122,14 @@ end
 -- returns true if it should be consumed, that is, the event should not be sent to the server
 -- returns false if it should not be consumed and will continue to the server
 local function shouldConsumeAreaLoot()
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return false
+    end
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
         local acquired = setOfItemsAcquired[id] ~= nil
-        if not acquired and config.Obj.FromID(id).isTradeable then
+        local object = config.Obj.FromID(id)
+        if not acquired and object.isTradeable and string.sub(object.configName, 1, 4) ~= "RAND" then
             return true
         end
     end
@@ -145,6 +159,9 @@ blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
 
 function miniMenuReadyFunc(event)
     -- Make changes to the minimenu
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
     local entries = event.miniMenu.entries
     if entries == nil then
         return
@@ -310,6 +327,9 @@ local function shouldShowAreaLoot()
     if not isShowingAreaLoot then
         return
     end
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
     local shouldShow = not shouldConsumeAreaLoot()
     if isShowingLootButton then
         if shouldShow then
@@ -365,6 +385,8 @@ local function addAllItemsFromTheBank(event)
                             end
                         end
                     end
+                elseif not object.isStockmarket then
+                    setOfItemsAcquired[id] = ""
                 else
                     count = count + 1
                     setOfItemsAcquired[id] = slot.obj.name
@@ -444,6 +466,9 @@ local function disableAcceptIfNotBond(event)
 end
 
 local function inventoryUpdatedSwitch(event)
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
     local config = event.inv
     if config.id == id.Inv.INV then
         addAllItemsNewInTheInventory(event)

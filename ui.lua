@@ -258,19 +258,43 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
-local height = 745
-local width = 615
 function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
+    local base_height = 1009
+    local scaleY = game_window.height / base_height
+    local preset = 2
+    if scaleY < 0.8 then
+        preset = 1
+    end
+    local presets = {
+        [1] = {
+            height = 400,
+            width = 615,
+            view1height = 120,
+            view2height = 140,
+            view3height = 100,
+            view3yterm = -5,
+        },
+
+        [2] = {
+            height = 745,
+            width = 615,
+            view1height = 120,
+            view2height = 500,
+            view3height = 100,
+            view3yterm = -20,
+        },
+    }
+    local sizes = presets[preset]
     setOfItemsAcquired = setOfItemsAcquiredParameter
     setOfAllItems = setOfAllItemsParameter
     settingsWindow = prettyui.Window.new(game_window, {
         title = "Bronzeman Mode",
-        x = -320,
-        y = -height/2,
+        x = -sizes.width/2,
+        y = -sizes.height/2,
         xAnchor = 0.5,
         yAnchor = 0.5,
-        width = width,
-        height = height,
+        width = sizes.width,
+        height = sizes.height,
         scrollable = true,
         onClose = function(window)
             if itemRibbon ~= nil then
@@ -286,7 +310,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         { text = "Settings"},
         { text = "About this plugin"},
     }, {
-        height = height-70,
+        height = sizes.height-70,
         activeIndex = 1,
         onChange = function(group, index, value, page)
         end,
@@ -312,12 +336,12 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         count = count + 1
     end
 
-    local view1height = 120
-    local view3height = 100
-    local view2height = 500
+    local view1height = sizes.view1height
+    local view2height = sizes.view2height
+    local view3height = sizes.view3height
 
     local view1 = prettyui.SimpleView.new(collectedItemsTab.content, {
-        width = width - 20,
+        width = sizes.width - 20,
         height = view1height,
         y = 0,
         inline = true,
@@ -454,16 +478,16 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
     })
 
     view2 = prettyui.SimpleView.new(collectedItemsTab.content, {
-        width = width - 20,
+        width = sizes.width - 20,
         height = view2height,
         y = view1height,
         scrollbarVisible = true,
     })
 
     local view3 = prettyui.SimpleView.new(collectedItemsTab.content, {
-        width = width - 20,
+        width = sizes.width - 20,
         height = view3height,
-        y = view1height + view2height - 20,
+        y = view1height + view2height + sizes.view3yterm,
     })
 
     local alpha = 0.04
@@ -498,8 +522,8 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
     addAllItemsFromPages()
 
     local settingsView = prettyui.SimpleView.new(settingsTab.content, {
-        height = height-100,
-        width = width - 20
+        height = sizes.height-100,
+        width = sizes.width - 20
     })
 
     local shouldShowUnobtainedItemsDescription = settingsView:AddText("Show unobtained items? (may cause lag when searching)", { inline = true })
@@ -556,8 +580,8 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
     })
 
     local aboutThisPluginView = prettyui.SimpleView.new(aboutThisPluginTab.content, {
-        height = height-100,
-        width = width - 20
+        height = sizes.height-100,
+        width = sizes.width - 20
     })
 
     aboutThisPluginView:AddText("Welcome to Bronzeman Mode").font = id.Font.MUSEO_SANS_19PT_BOLD
