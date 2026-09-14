@@ -32,4 +32,5 @@ Done!
 Originally, this was disable trade if they gave you an item you didn't have access to, but I don't think I should have trade enabled at all, since it doesn't seem very bronzeman to be able to be given stuff, even if you unlocked it (like let's say someone tries to give you 100m, that shouldn't work imo). The only exception is bonds, bonds should be tradeable to allow someone to give themselves membership with bonds. So basically, disable the "accept button" for any item that isn't a bond.
 ### Completed -- Add text explaining the gamemode
 
-### Add a bronzeman icon next to your name, like the ironman gamemode symbol
+### Completed -- Add a bronzeman icon next to your name, like the ironman gamemode symbol
+Fix bug with the wiki search

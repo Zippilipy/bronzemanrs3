@@ -19,7 +19,7 @@ end
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
 
--- add all stockmarket items and stockmarket potiondoses (see handlepotions.lua) to setOfAllItems
+-- add all tradeable items and tradeable potiondoses (see handlepotions.lua) to setOfAllItems
 for i=1,70000,1 do
     local object = config.Obj.FromID(i)
     if object == nil then
@@ -82,17 +82,7 @@ local function addToAcquired(id, object, collectionPopupItem)
     UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
 end
 
--- isRed is a boolean value that says whether it's red or not, this allows an early return on onMouseRepeat
-local isRed = false
 local isShowingAreaLoot = false
-
-local loot_inventory = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__LOOT_INVENTORY_WINDOW)
-local blocking_rectangle = ui.Rectangle.new(game_window)
-blocking_rectangle:SetPos(loot_inventory.position.x,loot_inventory.position.y)
-blocking_rectangle:SetSize(loot_inventory.size.width,loot_inventory.size.height)
-blocking_rectangle.clickthrough = true
-blocking_rectangle.colour = Vector4.new(0,0,0,0)
-blocking_rectangle.fill = true
 
 -- find all items in a 7 tile range for area loot
 -- returns a list of item ids, the same type of ids stored in setOfItemsAcquired
@@ -136,27 +126,6 @@ local function shouldConsumeAreaLoot()
     return false
 end
 
---subscrtibe to mouserepeat events for the blocking rectangle
-blocking_rectangle:Subscribe(ui.Hook.ONMOUSEREPEAT, "mouseEnterHook",
-    function (self)
-        if isRed then -- early return since this is a mouserepeat
-            return
-        end
-        if shouldConsumeAreaLoot() and isShowingAreaLoot then
-            isRed = true
-            self.clickthrough = false
-            self.colour = Vector4.new(0.5,0,0,0.5)
-        end
-    end
-)
-blocking_rectangle:Subscribe(ui.Hook.ONMOUSELEAVE, "mouseLeaveHook",
-    function (self)
-        isRed = false
-        self.clickthrough = true
-        self.colour = Vector4.new(0,0,0,0)
-    end
-)
-
 function miniMenuReadyFunc(event)
     -- Make changes to the minimenu
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
@@ -169,18 +138,48 @@ function miniMenuReadyFunc(event)
     local idxA = 0
     local idxB = 0
     for i, entry in pairs(entries) do
-        if entry.actionEntryType ~= MiniMenuEntryType.OBJ then
-            goto continue
-        end
-        local object = entry.objData.config
-        if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
-            goto continue
-        end
-        if setOfItemsAcquired[object.id] == nil then
-            if entry.actionVerbType == 2 then
-                idxA = i
-            elseif entry.actionVerbType == 1 then
-                idxB = i
+        if entry.actionEntryType == MiniMenuEntryType.INTERFACE then -- AREA LOOT
+            local object = entry.componentData.objConfig
+            if object == nil then
+                goto continue
+            end
+            local sprite = entry.componentData.component.sprite
+            if sprite ~= nil then
+                log(tostring(sprite))
+            end
+            if string.sub(object.configName, 1, 4) == "RAND" then
+                goto continue
+            end
+            if not object.isTradeable then
+                goto continue
+            end
+            if setOfItemsAcquired[object.id] == nil then
+                -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
+                -- So I will have to check the string :(
+                local verb = string.sub(entry.verbText, 1, 4)
+                if verb == "Take" then
+                    idxA = i
+                elseif verb == "Exam" then
+                    idxB = i
+                end
+            end
+        else -- ITEMS ON THE GROUND
+            if entry.actionEntryType ~= MiniMenuEntryType.OBJ then
+                goto continue
+            end
+            local object = entry.objData.config
+            if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
+                goto continue
+            end
+            if string.sub(object.configName, 1, 4) == "RAND" then
+                goto continue
+            end
+            if setOfItemsAcquired[object.id] == nil then
+                if entry.actionVerbType == MiniMenuActionVerbType.OP then
+                    idxA = i
+                elseif entry.actionVerbType == MiniMenuActionVerbType.EXAMINE then
+                    idxB = i
+                end
             end
         end
         ::continue::
