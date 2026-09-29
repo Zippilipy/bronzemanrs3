@@ -621,8 +621,10 @@ function UI:resetIconStuff()
     resetIconStuff()
 end
 
-function UI:destroyAllSlots()
+function UI:destroyUIStuff()
     destroyAllSlots()
+    itemRibbon:Destroy()
+    settingsWindow:Destroy()
 end
 
 return UI

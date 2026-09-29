@@ -6,6 +6,7 @@ local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_
 -- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said item, nil means you haven't
 -- for a more in depth description of setOfItemsAcquired, see handlepotions.lua
 local setOfAllItems = {}
+local canPickUpTheseItems = {}
 local Queue = require("queue")
 local UI = require("ui")
 
@@ -67,6 +68,8 @@ else
     UI.load(game_window, setOfItemsAcquired, setOfAllItems)
     UIHasLoaded = true
 end
+
+Event.SettingsLayerReady.Subscribe("onSettingsLayerReady", onSettingsLayerReady)
 
 -- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
 -- for each server tick, essentially making the collection log popup every 5 ticks.
@@ -158,9 +161,8 @@ local function shouldConsumeAreaLoot()
     end
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
-        local acquired = setOfItemsAcquired[id] ~= nil
         local object = config.Obj.FromID(id)
-        if not acquired and object.isTradeable and string.sub(object.configName, 1, 4) ~= "RAND" then
+        if setOfItemsAcquired[id] == nil and canPickUpTheseItems[id] == nil and object.isTradeable and string.sub(object.configName, 1, 4) ~= "RAND" then
             return true
         end
     end
@@ -196,7 +198,7 @@ function miniMenuReadyFunc(event)
             if not object.isTradeable then
                 goto continue
             end
-            if setOfItemsAcquired[object.id] == nil then
+            if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
                 -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
                 -- So I will have to check the string :(
                 -- string.sub(entry.verbText, 1, 1) is probably faster and just check "T" and "E" but it's probably so minor who cares
@@ -218,7 +220,7 @@ function miniMenuReadyFunc(event)
             if string.sub(object.configName, 1, 4) == "RAND" then
                 goto continue
             end
-            if setOfItemsAcquired[object.id] == nil then
+            if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
                 if entry.actionVerbType == MiniMenuActionVerbType.OP then
                     idxA = i
                 elseif entry.actionVerbType == MiniMenuActionVerbType.EXAMINE then
@@ -236,14 +238,7 @@ Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 -- I need a way to check ownership of the drop, right now it just counts anything on the ground
 local function addToItemAcquiredFromDrop(event)
     if event.isOwner then
-        local collectionPopupItem = {
-            title = "Bronzeman log",
-            text = string.format("New item obtained: %s", event.objType.name),
-            item = event.objType,
-            y = 50,
-        }
-        log(string.format("Adding %s to acquired", event.objType.name))
-        addToAcquired(event.objType.id, event.objType, collectionPopupItem)
+        canPickUpTheseItems[event.objType.id] = event.objType
     end
 end
 Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
@@ -254,14 +249,7 @@ local function addToItemAcquiredFromDropChanged(event)
     if event.oldCount > event.newCount then
         return
     end
-    local collectionPopupItem = {
-        title = "Bronzeman log",
-        text = string.format("New item obtained: %s", event.objType.name),
-        item = event.objType,
-        y = 50,
-    }
-    log(string.format("Adding %s to acquired", event.objType.name))
-    addToAcquired(event.objType.id, event.objType, collectionPopupItem)
+    canPickUpTheseItems[event.objType.id] = event.objType
 end
 Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
 
@@ -516,6 +504,54 @@ local function addAllItemsNewInTheInventory(event)
     end
 end
 
+local function addAllItemsInTheInventory()
+    if setOfItemsAcquired == nil then
+        return
+    end
+    local inv = Inventory.Find(config.Inv.INV)
+    if not inv.isValid then
+        return
+    end
+    local slots = inv:GetSlots()
+    local count = 0
+    local sizeOfAcquired = 0
+    for _ in pairs(setOfItemsAcquired) do
+        sizeOfAcquired = sizeOfAcquired + 1
+    end
+    for _, slot in ipairs(slots) do
+        local id = slot.obj.id
+        if id ~= -1 then
+            addToAcquired(id, slot.obj, nil)
+            local newSizeOfAcquired = 0
+            for _ in pairs(setOfItemsAcquired) do
+                newSizeOfAcquired = newSizeOfAcquired + 1
+            end
+            if newSizeOfAcquired > sizeOfAcquired then
+                sizeOfAcquired = newSizeOfAcquired
+                count = count + 1
+            end
+        end
+    end
+    if count == 0 then
+        Event.ServerLogic.Unsubscribe("addAllItemsInTheInventory")
+        return
+    end
+    local text = string.format("%d new items added", count)
+    if count == 1 then
+        text = string.format("%d new item added", count)
+    end
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = text,
+        item = config.Obj.BANK_TUTOR_ICON_DUMMY,
+        y = 50,
+    }
+    collectionPopupQueue:enqueue(collectionPopupItem)
+    Event.ServerLogic.Unsubscribe("addAllItemsInTheInventory")
+end
+
+Event.ServerLogic.Subscribe("addAllItemsInTheInventory", addAllItemsInTheInventory)
+
 local function disableAcceptIfNotBond(event)
     local tradeconfig = event.inv
     local trade = Inventory.Find(tradeconfig)
@@ -586,10 +622,6 @@ local confirm_button_build_x
 local confirm_button_build_y
 
 local function disableConfirmButton()
-    local comp = ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME)
-    if comp ~= nil then
-        log(comp.x)
-    end
     if setOfItemsAcquired == nil then
         return
     end
@@ -652,7 +684,7 @@ function PluginShutdown()
     end
     UI:resetIconStuff()
     if UIHasLoaded then
-        UI:destroyAllSlots()
+        UI:destroyUIStuff()
     end
 end
 ::done::
