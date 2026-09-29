@@ -1,7 +1,5 @@
 local UI = {}
 
-local itemRibbon = nil
-
 local settingsWindow = nil
 
 local counterForItemSlot = 0
@@ -23,6 +21,8 @@ local setOfAllItems
 local pageNumber
 
 local heading
+
+local view
 
 local view2
 
@@ -269,7 +269,7 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
-function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter)
+function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllItemsParameter)
     local base_height = 1009
     local scaleY = game_window.height / base_height
     local preset = 2
@@ -307,18 +307,14 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
         width = sizes.width,
         height = sizes.height,
         scrollable = true,
-        onClose = function(window)
-            if itemRibbon ~= nil then
-                itemRibbon:SetActive(false)
-            end
-        end,
     })
 
     settingsWindow:Close()
 
+    OpenWindow(root_layer)
+
     local tabs = settingsWindow:AddTabs({
         { text = "Collected items"},
-        { text = "Settings"},
         { text = "About this plugin"},
     }, {
         height = sizes.height-70,
@@ -328,18 +324,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
     })
 
     local collectedItemsTab = tabs:GetPage(1)
-    local settingsTab = tabs:GetPage(2)
-    local aboutThisPluginTab = tabs:GetPage(3)
-        
-    -- Inventory artwork can be used instead of a built-in sprite.
-    itemRibbon = prettyui.RibbonBar.Register({
-        id = "bronzeman-plugin",
-        object = config.Obj.BRONZE_MED_HELM,
-        tooltip = "Open Bronzeman plugin",
-        onClick = function(handle, active)
-            settingsWindow.root.hidden = not active
-        end,
-    })
+    local aboutThisPluginTab = tabs:GetPage(2)
 
     local count = 0
 
@@ -531,64 +516,6 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
 
     addAllItemsFromPages()
 
-    local settingsView = prettyui.SimpleView.new(settingsTab.content, {
-        height = sizes.height-100,
-        width = sizes.width - 20
-    })
-
-    local shouldShowUnobtainedItemsDescription = settingsView:AddText("Show unobtained items? (may cause lag when searching)", { inline = true })
-
-    local shouldShowUnobtainedItemsToggle = settingsView:AddRadioButton({
-        { text = "On", value = "on" },
-        { text = "Off", value = "off" },
-    }, {
-        selectedValue = settings["shouldShowUnobtainedItems"],
-        onChange = function(group, value)
-            settings["shouldShowUnobtainedItems"] = value
-            shouldShowUnobtainedItems = value == "on"
-            PersistentDB:Set("settings", settings)
-            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
-        end,
-        inline = true,
-    })
-
-    local pkingAllowedDescription = settingsView:AddText("Should PKing unlock items? (currently does nothing)", { inline = true })
-
-    local pkingAllowedToggle = settingsView:AddRadioButton({
-        { text = "On", value = "on" },
-        { text = "Off", value = "off" },
-    }, {
-        selectedValue = settings["pkingAllowed"],
-        onChange = function(group, value)
-            settings["pkingAllowed"] = value
-            pkingAllowed = value == "on"
-            PersistentDB:Set("settings", settings)
-        end,
-        inline = true,
-    })
-
-    local showIconDescription = settingsView:AddText("Show Bronzeman icon?", {inline = true})
-
-    local showIconToggle = settingsView:AddRadioButton({
-        { text = "On", value = "on" },
-        { text = "Off", value = "off" },
-    }, {
-        selectedValue = settings["showIcon"],
-        onChange = function(group, value)
-            settings["showIcon"] = value
-            showIcon = value == "on"
-            PersistentDB:Set("settings", settings)
-            if showIcon then
-                addIconStuff()
-                Event.Draw.Subscribe("bronzemanIcon", bronzemanIcon)
-            else
-                Event.Draw.Unsubscribe("bronzemanIcon")
-                resetIconStuff()
-            end
-        end,
-        inline = true,
-    })
-
     local aboutThisPluginView = prettyui.SimpleView.new(aboutThisPluginTab.content, {
         height = sizes.height-100,
         width = sizes.width - 20
@@ -621,9 +548,78 @@ function UI:resetIconStuff()
     resetIconStuff()
 end
 
+function OpenWindow(root_layer)
+    view = prettyui.SimpleView.new(root_layer, {
+        width = root_layer.width
+    })
+
+    view:AddSimpleButton("Bronzeman collection", function(self, active)
+        settingsWindow:Show()
+    end)
+
+    view:AddText("Show unobtained items? (may cause lag when searching)", { inline = true })
+
+    view:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["shouldShowUnobtainedItems"],
+        onChange = function(group, value)
+            settings["shouldShowUnobtainedItems"] = value
+            shouldShowUnobtainedItems = value == "on"
+            PersistentDB:Set("settings", settings)
+            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        end,
+        inline = true,
+    })
+
+    view:AddText("Should PKing unlock items? (currently does nothing)", { inline = true })
+
+    view:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["pkingAllowed"],
+        onChange = function(group, value)
+            settings["pkingAllowed"] = value
+            pkingAllowed = value == "on"
+            PersistentDB:Set("settings", settings)
+        end,
+        inline = true,
+    })
+
+    view:AddText("Show Bronzeman icon?", {inline = true})
+
+    view:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["showIcon"],
+        onChange = function(group, value)
+            settings["showIcon"] = value
+            showIcon = value == "on"
+            PersistentDB:Set("settings", settings)
+            if showIcon then
+                addIconStuff()
+                Event.Draw.Subscribe("bronzemanIcon", bronzemanIcon)
+            else
+                Event.Draw.Unsubscribe("bronzemanIcon")
+                resetIconStuff()
+            end
+        end,
+        inline = true,
+    })
+end
+
+function UI:OpenWindow(root_layer)
+    if view ~= nil then
+        view:Destroy()
+    end
+    OpenWindow(root_layer)
+end
+
 function UI:destroyUIStuff()
     destroyAllSlots()
-    itemRibbon:Destroy()
     settingsWindow:Destroy()
 end
 

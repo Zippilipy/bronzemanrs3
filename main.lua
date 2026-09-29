@@ -9,6 +9,7 @@ local setOfAllItems = {}
 local canPickUpTheseItems = {}
 local Queue = require("queue")
 local UI = require("ui")
+local selectedid = -1
 
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
@@ -22,7 +23,7 @@ for i=1,70000,1 do
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
     if potionStruct then
         handlePotions(potionStruct, setOfAllItems)
-    elseif object.isTradeable and setOfAllItems[i] == nil then
+    elseif object.isStockmarket and setOfAllItems[i] == nil then
         setOfAllItems[i] = object.name
     end
     ::continue::
@@ -48,8 +49,6 @@ local function obtainPlayerTrackingID()
                 setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
                 PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
             end
-            UI.load(game_window, setOfItemsAcquired, setOfAllItems)
-            UIHasLoaded = true
             Event.ServerLogic.Unsubscribe("obtainPlayerTrackingID")
         end
     end
@@ -65,8 +64,19 @@ else
         setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
         PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
     end
-    UI.load(game_window, setOfItemsAcquired, setOfAllItems)
-    UIHasLoaded = true
+end
+
+local function onSettingsLayerReady(event) 
+    local root_layer = event.component
+    if setOfItemsAcquired == nil then
+        return
+    end
+    if not UIHasLoaded then
+        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems)
+        UIHasLoaded = true
+    else
+        UI:OpenWindow(root_layer)
+    end
 end
 
 Event.SettingsLayerReady.Subscribe("onSettingsLayerReady", onSettingsLayerReady)
@@ -184,29 +194,42 @@ function miniMenuReadyFunc(event)
     local idxA = 0
     local idxB = 0
     for i, entry in pairs(entries) do
-        if entry.actionEntryType == MiniMenuEntryType.INTERFACE then -- AREA LOOT
-            if not isShowingAreaLoot then
-                goto continue
-            end
-            local object = entry.componentData.objConfig
-            if object == nil then
-                goto continue
-            end
-            if string.sub(object.configName, 1, 4) == "RAND" then
-                goto continue
-            end
-            if not object.isTradeable then
-                goto continue
-            end
-            if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
-                -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
-                -- So I will have to check the string :(
-                -- string.sub(entry.verbText, 1, 1) is probably faster and just check "T" and "E" but it's probably so minor who cares
-                local verb = string.lower(string.sub(entry.verbText, 1, 4))
-                if verb == "take" then
-                    idxA = i
-                elseif verb == "exam" then
-                    idxB = i
+        if entry.actionEntryType == MiniMenuEntryType.INTERFACE or entry.actionEntryType == MiniMenuEntryType.NONE then
+            if selectedid ~= -1 then -- DISABLE GE
+                if setOfItemsAcquired[selectedid] == nil then
+                    if entry.verbText == "Confirm" then
+                        idxA = i
+                    elseif entry.actionVerbType == MiniMenuActionVerbType.UNSPECIFIED then
+                        idxB = i
+                    end
+                end
+            else
+                if entry.actionEntryType == MiniMenuEntryType.INTERFACE then
+                    -- AREA LOOT
+                    if not isShowingAreaLoot then
+                        goto continue
+                    end
+                    local object = entry.componentData.objConfig
+                    if object == nil then
+                        goto continue
+                    end
+                    if string.sub(object.configName, 1, 4) == "RAND" then
+                        goto continue
+                    end
+                    if not object.isTradeable then
+                        goto continue
+                    end
+                    if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
+                        -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
+                        -- So I will have to check the string :(
+                        -- string.sub(entry.verbText, 1, 1) is probably faster and just check "T" and "E" but it's probably so minor who cares
+                        local verb = string.lower(string.sub(entry.verbText, 1, 4))
+                        if verb == "take" then
+                            idxA = i
+                        elseif verb == "exam" then
+                            idxB = i
+                        end
+                    end
                 end
             end
         else -- ITEMS ON THE GROUND
@@ -612,56 +635,18 @@ local function printAllChildrens(input, static, level)
     end
 end
 
-local confirm_button_initialized = false
-local confirm_button_visible = true
-local confirm_button_click
-local confirm_button_build
-local confirm_button_click_x
-local confirm_button_click_y
-local confirm_button_build_x
-local confirm_button_build_y
+local function printAllChildren(input)
+    printAllChildrens(input, true, 0)
+end
 
 local function disableConfirmButton()
-    if setOfItemsAcquired == nil then
-        return
-    end
     local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
     if itemCurrentlyBeingSelected == nil then
         return
     else
-        itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(227)
+        itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(154)
     end
-    local selectedid = itemCurrentlyBeingSelected.associatedObjectID
-    if selectedid ~= -1 then
-        if not confirm_button_initialized then
-            confirm_button_click = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__MAKEOFFERBUTTON_CLICK)
-            confirm_button_build = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__MAKEOFFERBUTTON_BUILD)
-            confirm_button_click_x = confirm_button_click.position.x
-            confirm_button_click_y = confirm_button_click.position.y
-            confirm_button_build_x = confirm_button_build.position.x
-            confirm_button_build_y = confirm_button_build.position.y
-            confirm_button_initialized = true
-        end
-        if setOfItemsAcquired[selectedid] ~= nil then
-            if not confirm_button_visible and confirm_button_initialized then
-                confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
-                confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
-                confirm_button_visible = true
-            end
-        else
-            if confirm_button_visible and confirm_button_initialized then
-                confirm_button_click:SetPos(confirm_button_click.position.x + 500, confirm_button_click.position.y + 500)
-                confirm_button_build:SetPos(confirm_button_build.position.x + 500, confirm_button_build.position.y + 500)
-                confirm_button_visible = false
-            end
-        end
-    else
-        if not confirm_button_visible and confirm_button_initialized then
-            confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
-            confirm_button_click:SetPos(confirm_button_build_x, confirm_button_build_y)
-            confirm_button_visible = true
-        end
-    end
+    selectedid = itemCurrentlyBeingSelected.associatedObjectID
 end
 
 Event.ServerLogic.Subscribe("disableConfirmButton", disableConfirmButton)
@@ -675,12 +660,6 @@ function PluginShutdown()
     end
     if accept_button ~= nil then
         accept_button:SetPos(accept_button_x, accept_button_y)
-    end
-    if confirm_button_click ~= nil then
-        confirm_button_click:SetPos(confirm_button_click_x, confirm_button_click_y)
-    end
-    if confirm_button_build ~= nil then
-        confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
     end
     UI:resetIconStuff()
     if UIHasLoaded then
