@@ -78,8 +78,7 @@ local names = {}
 
 local inputfields = {}
 
-local pluginresource = Plugin.resources.images.icon.bronzemanicon
-pluginresource:Load()
+local namecomp = ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME)
 
 local function bronzemanIcon()
     for _, value in pairs(names) do
@@ -92,7 +91,17 @@ local function bronzemanIcon()
             value.component:SetPos(value.x + 9, value.y)
         end
     end
+    if namecomp.content == "Search Wiki<img=3>:" then
+        local value = names[1]
+        value.component:SetPos(value.x , value.y)
+        value.icon.hidden = true
+    else
+        local value = names[1]
+        value.icon.hidden = false
+    end
 end
+
+local icons = {}
 
 local function addIconStuff()
     for key, value in pairs(chats) do
@@ -102,6 +111,7 @@ local function addIconStuff()
         icon.sprite = pluginresource
         icon:SetPos(comp.x, comp.y+7)
         names[key] = {component = comp, x = comp.x, y = comp.y, icon = icon}
+        table.insert(icons, icon)
     end
 
     for key, value in pairs(input) do
@@ -122,6 +132,7 @@ local function resetIconStuff()
             value.component:SetPos(value.x, value.y)
         end
     end
+    pluginresource:Unload()
 end
 
 if showIcon then
@@ -332,7 +343,7 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
 
     local count = 0
 
-    for _ in pairs(setOfItemsAcquiredParameter) do
+    for _ in pairs(setOfItemsAcquired) do
         count = count + 1
     end
 
@@ -447,7 +458,6 @@ function UI.load(game_window, setOfItemsAcquiredParameter, setOfAllItemsParamete
             if eventType ~= ui.SelectionChangeEvent.SELECTED then
                 return
             end
-            log("hello")
             page = 1
             if id == 0 then
                 pages = createPages(setOfItemsAcquired, false)
@@ -607,7 +617,12 @@ function UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquiredParameter)
 end
 
 function UI:resetIconStuff()
+    Event.Draw.Unsubscribe("bronzemanIcon")
     resetIconStuff()
+end
+
+function UI:destroyAllSlots()
+    destroyAllSlots()
 end
 
 return UI

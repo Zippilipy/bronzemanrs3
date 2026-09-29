@@ -64,7 +64,7 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
                 bestPotionDoseNumber = dose
             end
         else
-            local bigDose = dose - 12 -- 13 - 18 <=> 1 - 6
+            local bigDose = dose - 12 -- 13 - 18 => 1 - 6
             if bigDose > bestBigPotionDoseNumber then
                 bestBigPotionDoseNumber = bigDose
             end

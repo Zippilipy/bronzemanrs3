@@ -1,8 +1,11 @@
 {
-    "name": "Bronzeman plugin",
+    "name": "bronzeman",
     "version": "1.0",
-	"requiredDependencies": [
-      "prettyui"
-    ],
-    "optionalDependencies": []
+    "contactEmailAddress": ["zippilipy@gmail.com"],
+    "requiredPermissions": [],
+    "optionalPermissions": [ "trackingAccess" ],
+	"requiredDependencies": {
+      "prettyui" : 6398181 
+    },
+    "optionalDependencies": {}
 }

@@ -1,20 +1,13 @@
 --PersistentDB:Clear()
-local Queue = require("queue")
-local UI = require("ui")
+--goto done
 -- establish important global variables
 -- game window, is the game window
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
--- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said itexxm, nil means you haven't
+-- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said item, nil means you haven't
 -- for a more in depth description of setOfItemsAcquired, see handlepotions.lua
 local setOfAllItems = {}
-local setOfItemsAcquired = PersistentDB:Get("acquiredItems")
-
-if setOfItemsAcquired == nil then
-    log("Persistent DB for setOfItemsAcquired was nil!")
-    setOfItemsAcquired = {}
-    setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
-    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-end
+local Queue = require("queue")
+local UI = require("ui")
 
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
@@ -34,8 +27,46 @@ for i=1,70000,1 do
     ::continue::
 end
 
-UI.load(game_window, setOfItemsAcquired, setOfAllItems)
-
+local setOfItemsAcquired = nil
+local acquiredItemsIDName = nil
+local playerTrackingID = nil
+local UIHasLoaded = false
+if Plugin.HasPermission(PluginPermissions.trackingAccess) then
+    playerTrackingID = Player.GetTrackingID()
+end
+-- this function tries to obtain playertrackingid every tick until it finds it
+local function obtainPlayerTrackingID()
+    if Plugin.HasPermission(PluginPermissions.trackingAccess) then
+        playerTrackingID = Player.GetTrackingID()
+        if playerTrackingID ~= nil then
+            acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
+            setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
+            if setOfItemsAcquired == nil then
+                log("Persistent DB for setOfItemsAcquired was nil!")
+                setOfItemsAcquired = {}
+                setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
+                PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
+            end
+            UI.load(game_window, setOfItemsAcquired, setOfAllItems)
+            UIHasLoaded = true
+            Event.ServerLogic.Unsubscribe("obtainPlayerTrackingID")
+        end
+    end
+end
+if playerTrackingID == nil then
+    Event.ServerLogic.Subscribe("obtainPlayerTrackingID", obtainPlayerTrackingID)
+else
+    acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
+    setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
+    if setOfItemsAcquired == nil then
+        log("Persistent DB for setOfItemsAcquired was nil!")
+        setOfItemsAcquired = {}
+        setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
+        PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
+    end
+    UI.load(game_window, setOfItemsAcquired, setOfAllItems)
+    UIHasLoaded = true
+end
 
 -- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
 -- for each server tick, essentially making the collection log popup every 5 ticks.
@@ -45,10 +76,16 @@ local counterForCollectionPopup = 0
 local collectionPopupQueue = Queue.new()
 
 local function addToAcquired(id, object, collectionPopupItem)
+    if setOfItemsAcquired == nil then
+        return
+    end
     if object == nil then
         return
     end
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
+    if setOfItemsAcquired[id] ~= nil then
         return
     end
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
@@ -60,26 +97,27 @@ local function addToAcquired(id, object, collectionPopupItem)
                 collectionPopupQueue:enqueue(collectionPopup)
             end
         end
-        UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        if UIHasLoaded then
+            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+        end
         return
     end
     if not object.isTradeable then
         return
     end
-    if setOfItemsAcquired[id] ~= nil then
-        return
-    end
     if not object.isStockmarket then -- tradeables that aren't g.e. shouldn't be displayed but they should be added
         setOfItemsAcquired[id] = ""
-        PersistentDB:Set("acquiredItems",setOfItemsAcquired)
+        PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
         return
     end
     setOfItemsAcquired[id] = object.name
     if collectionPopupItem ~= nil then
         collectionPopupQueue:enqueue(collectionPopupItem)
     end
-    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-    UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+    PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+    if UIHasLoaded then
+        UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+    end
 end
 
 local isShowingAreaLoot = false
@@ -112,6 +150,9 @@ end
 -- returns true if it should be consumed, that is, the event should not be sent to the server
 -- returns false if it should not be consumed and will continue to the server
 local function shouldConsumeAreaLoot()
+    if setOfItemsAcquired == nil then
+        return
+    end
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return false
     end
@@ -127,6 +168,9 @@ local function shouldConsumeAreaLoot()
 end
 
 function miniMenuReadyFunc(event)
+    if setOfItemsAcquired == nil then
+        return
+    end
     -- Make changes to the minimenu
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return
@@ -139,13 +183,12 @@ function miniMenuReadyFunc(event)
     local idxB = 0
     for i, entry in pairs(entries) do
         if entry.actionEntryType == MiniMenuEntryType.INTERFACE then -- AREA LOOT
+            if not isShowingAreaLoot then
+                goto continue
+            end
             local object = entry.componentData.objConfig
             if object == nil then
                 goto continue
-            end
-            local sprite = entry.componentData.component.sprite
-            if sprite ~= nil then
-                log(tostring(sprite))
             end
             if string.sub(object.configName, 1, 4) == "RAND" then
                 goto continue
@@ -156,10 +199,11 @@ function miniMenuReadyFunc(event)
             if setOfItemsAcquired[object.id] == nil then
                 -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
                 -- So I will have to check the string :(
-                local verb = string.sub(entry.verbText, 1, 4)
-                if verb == "Take" then
+                -- string.sub(entry.verbText, 1, 1) is probably faster and just check "T" and "E" but it's probably so minor who cares
+                local verb = string.lower(string.sub(entry.verbText, 1, 4))
+                if verb == "take" then
                     idxA = i
-                elseif verb == "Exam" then
+                elseif verb == "exam" then
                     idxB = i
                 end
             end
@@ -190,17 +234,36 @@ Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 
 -- addToItemAcquiredFromDrop and addToItemAcquiredFromDropChanged both add from items on the ground
 -- I need a way to check ownership of the drop, right now it just counts anything on the ground
---local function addToItemAcquiredFromDrop(event)
---    addToAcquired(event.objType.id, event.objType.name, event.objType)
---end
---Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
---local function addToItemAcquiredFromDropChanged(event)
---    if event.oldCount > event.newCount then
---        return
---    end
---    addToAcquired(event.objType.id, event.objType.name, event.objType)
---end
---Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
+local function addToItemAcquiredFromDrop(event)
+    if event.isOwner then
+        local collectionPopupItem = {
+            title = "Bronzeman log",
+            text = string.format("New item obtained: %s", event.objType.name),
+            item = event.objType,
+            y = 50,
+        }
+        log(string.format("Adding %s to acquired", event.objType.name))
+        addToAcquired(event.objType.id, event.objType, collectionPopupItem)
+    end
+end
+Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
+local function addToItemAcquiredFromDropChanged(event)
+    if not event.isOwner then
+        return
+    end
+    if event.oldCount > event.newCount then
+        return
+    end
+    local collectionPopupItem = {
+        title = "Bronzeman log",
+        text = string.format("New item obtained: %s", event.objType.name),
+        item = event.objType,
+        y = 50,
+    }
+    log(string.format("Adding %s to acquired", event.objType.name))
+    addToAcquired(event.objType.id, event.objType, collectionPopupItem)
+end
+Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
 
 -- Here's my super duper non-threading solution to simultaneous collectionPopupEvents, I store them in a queue
 -- then dequeue every 5 ticks
@@ -351,6 +414,9 @@ end
 Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)
 
 local function addAllItemsFromTheBank(event)
+    if setOfItemsAcquired == nil then
+        return
+    end
     local bankconfig = event.inv
     local count = 0
     local bank = Inventory.Find(bankconfig)
@@ -398,8 +464,10 @@ local function addAllItemsFromTheBank(event)
     if count == 0 then
         return
     end
-    PersistentDB:Set("acquiredItems",setOfItemsAcquired)
-    UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+    PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+    if UIHasLoaded then
+        UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+    end
     local text = string.format("%d new items added", count)
     if count == 1 then
         text = string.format("%d new item added", count)
@@ -518,6 +586,13 @@ local confirm_button_build_x
 local confirm_button_build_y
 
 local function disableConfirmButton()
+    local comp = ui.Interfaces:GetComponent(id.Component.CHATDEFAULT__PLAYER_NAME)
+    if comp ~= nil then
+        log(comp.x)
+    end
+    if setOfItemsAcquired == nil then
+        return
+    end
     local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
     if itemCurrentlyBeingSelected == nil then
         return
@@ -576,4 +651,8 @@ function PluginShutdown()
         confirm_button_build:SetPos(confirm_button_build_x, confirm_button_build_y)
     end
     UI:resetIconStuff()
+    if UIHasLoaded then
+        UI:destroyAllSlots()
+    end
 end
+::done::
