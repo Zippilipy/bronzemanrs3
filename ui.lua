@@ -26,6 +26,8 @@ local view
 
 local view2
 
+local removeSetOfItemsAcquired
+
 local settings = PersistentDB:Get("settings")
 if settings == nil then
     log("Persistent DB for settings was nil!")
@@ -269,7 +271,7 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
-function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllItemsParameter)
+function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllItemsParameter, removeSetOfItemsAcquiredParameter)
     local base_height = 1009
     local scaleY = game_window.height / base_height
     local preset = 2
@@ -298,6 +300,7 @@ function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllI
     local sizes = presets[preset]
     setOfItemsAcquired = setOfItemsAcquiredParameter
     setOfAllItems = setOfAllItemsParameter
+    removeSetOfItemsAcquired = removeSetOfItemsAcquiredParameter
     settingsWindow = prettyui.Window.new(game_window, {
         title = "Bronzeman Mode",
         x = -sizes.width/2,
@@ -549,6 +552,7 @@ function UI:resetIconStuff()
 end
 
 function OpenWindow(root_layer)
+    local double_confirm = false
     view = prettyui.SimpleView.new(root_layer, {
         width = root_layer.width
     })
@@ -609,6 +613,49 @@ function OpenWindow(root_layer)
         end,
         inline = true,
     })
+
+    local countingTicks = 0
+    local countedTen = false
+    local resetbutton
+    local red = Vector4.new(255, 0, 0, 1)
+    local hasDestroyed = false
+    local function countTenTicks(event)
+        countingTicks = countingTicks + 1
+        if resetbutton.content == nil then
+            Event.ServerLogic.Unsubscribe("countTenTicks")
+            return
+        end
+        resetbutton.content.content = string.format("Are you sure? %d", 10-countingTicks)
+        resetbutton.content.colour = red
+        if countingTicks > 9 then
+            countedTen = true
+            countingTicks = 0
+            resetbutton.content.content = "Are you sure?"
+            resetbutton.content.colour = red
+            Event.ServerLogic.Unsubscribe("countTenTicks")
+        end
+    end
+
+    resetbutton = view:AddSimpleButton("Restart the plugin for the effects to take place", function(self, active)
+        if hasDestroyed then
+            return
+        end
+        if not double_confirm then
+            self.content.content = "Are you sure? 10"
+            resetbutton.content.colour = red
+            Event.ServerLogic.Subscribe("countTenTicks", countTenTicks)
+            double_confirm = true
+        else
+            if countedTen then
+                self.content.content = "Restart the plugin for the effects to take place"
+                double_confirm = false
+                removeSetOfItemsAcquired()
+                hasDestroyed = true
+            end
+        end
+    end)
+    resetbutton.content.content = "Reset the bronzeman collection"
+    resetbutton.content.colour = red
 end
 
 function UI:OpenWindow(root_layer)

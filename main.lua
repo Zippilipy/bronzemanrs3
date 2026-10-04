@@ -1,5 +1,3 @@
---PersistentDB:Clear()
---goto done
 -- establish important global variables
 -- game window, is the game window
 ExecuteConsoleCommand("ppr bronzeman")
@@ -80,13 +78,19 @@ else
     end
 end
 
+local function removeSetOfItemsAcquired()
+    if acquiredItemsIDName ~= nil then
+        PersistentDB:Delete(acquiredItemsIDName)
+    end
+end
+
 local function onSettingsLayerReady(event) 
     local root_layer = event.component
     if setOfItemsAcquired == nil then
         return
     end
     if not UIHasLoaded then
-        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems)
+        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired)
         UIHasLoaded = true
     else
         UI:OpenWindow(root_layer)
@@ -733,4 +737,3 @@ function PluginShutdown()
         UI:destroyUIStuff()
     end
 end
-::done::
