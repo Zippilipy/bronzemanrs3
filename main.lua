@@ -2,6 +2,8 @@
 --goto done
 -- establish important global variables
 -- game window, is the game window
+ExecuteConsoleCommand("ppr bronzeman")
+ExecuteConsoleCommand("ppe bronzeman trackingAccess")
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 -- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said item, nil means you haven't
 -- for a more in depth description of setOfItemsAcquired, see handlepotions.lua
@@ -15,18 +17,30 @@ local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
 
 -- add all tradeable items and tradeable potiondoses (see handlepotions.lua) to setOfAllItems
-for i=1,70000,1 do
-    local object = config.Obj.FromID(i)
-    if object == nil then
-        goto continue
+do
+    local nilcounter = 0
+    local i = 0
+    while true do
+        local object = config.Obj.FromID(i)
+        if object == nil then
+            nilcounter = nilcounter + 1
+            if nilcounter > 100 then
+                break
+            end
+            goto continue
+        end
+        do
+            nilcounter = 0
+            local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
+            if potionStruct then
+                handlePotions(potionStruct, setOfAllItems)
+            elseif object.isStockmarket and setOfAllItems[i] == nil then
+                setOfAllItems[i] = object.name
+            end
+        end
+        ::continue::
+        i = i + 1
     end
-    local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
-    if potionStruct then
-        handlePotions(potionStruct, setOfAllItems)
-    elseif object.isStockmarket and setOfAllItems[i] == nil then
-        setOfAllItems[i] = object.name
-    end
-    ::continue::
 end
 
 local setOfItemsAcquired = nil
@@ -492,16 +506,28 @@ local function addAllItemsFromTheBank(event)
     collectionPopupQueue:enqueue(collectionPopupItem)
 end
 
+local tradeMenuIsOpen = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER) ~= nil
+
 local function inventoryAddedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.BANK then
         addAllItemsFromTheBank(event)
     elseif config.id == id.Inv.TRADEOFFER then
         initializeAcceptButton = true
+        tradeMenuIsOpen = true
     end
 end
 
 Event.InventoryAdded.Subscribe("inventoryAddedSwitch", inventoryAddedSwitch)
+
+local function inventoryRemovedEvent(event)
+    local config = event.inv
+    if config.id == id.Inv.TRADEOFFER then
+        tradeMenuIsOpen = false
+    end
+end
+
+Event.InventoryRemoved.Subscribe("inventoryRemovedEvent", inventoryRemovedEvent)
 
 local function addAllItemsNewInTheInventory(event)
     local invconfig = event.inv
@@ -576,20 +602,47 @@ end
 Event.ServerLogic.Subscribe("addAllItemsInTheInventory", addAllItemsInTheInventory)
 
 local function disableAcceptIfNotBond(event)
-    local tradeconfig = event.inv
-    local trade = Inventory.Find(tradeconfig)
-    if not trade.isValid then
+    if not tradeMenuIsOpen then
         return
     end
-    for _, slot in ipairs(trade:GetSlots()) do
-        local itemId = slot.obj.id
-        if itemId ~= -1 and itemId ~= id.Obj.REDBERRIES then
-            accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
-            return
-        end
+    local trade_offer_layer_other = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER)
+    local should_block = false
+    trade_offer_layer_other:IterateDynamicComponents(
+        function (component, visible)
+            if component.type == ui.ComponentType.SPRITE then
+                local objid = component.associatedObjectID
+                if objid ~= -1 then
+                    if objid ~= id.Obj.REDBERRIES then
+                        if not should_block then
+                            accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
+                        end
+                        should_block = true
+                    else
+                    end
+                end
+            end
+        return false
+    end)
+    local trade_offer_layer_your = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__YOUR_OFFER_LAYER)
+    trade_offer_layer_your:IterateDynamicComponents(
+        function (component, visible)
+            if component.type == ui.ComponentType.SPRITE then
+                local objid = component.associatedObjectID
+                if objid ~= -1 then
+                    if not should_block then
+                        accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
+                    end
+                    should_block = true
+                end
+            end
+        return false
+    end)
+    if not should_block then
+        accept_button:SetPos(accept_button_x, accept_button_y)
     end
-    accept_button:SetPos(accept_button_x, accept_button_y)
 end
+
+Event.ServerLogic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
 
 local function inventoryUpdatedSwitch(event)
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
@@ -630,6 +683,16 @@ local function printAllChildrens(input, static, level)
         input:IterateDynamicComponents(
             function (component, visible)
                 log(string.format("Found dynamic component with id: %d type: %d at level: %d, visibility: %s", component.dynamicID, component.type, level, tostring(visible)))
+                    if component.type == ui.ComponentType.SPRITE then
+                    local id = component.associatedObjectID
+                    if id ~= -1 then
+                        if setOfItemsAcquired[id] ~= nil then
+                            log(string.format("You are allowed to buy %s", config.Obj.FromID(id).name))
+                        else
+                            log(string.format("You are NOT allowed to buy %s", config.Obj.FromID(id).name))
+                        end
+                    end
+                end
             return false
             end)
     end
@@ -637,9 +700,13 @@ end
 
 local function printAllChildren(input)
     printAllChildrens(input, true, 0)
+    printAllChildrens(input, false, 0)
 end
 
 local function disableConfirmButton()
+    if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
+        return
+    end
     local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
     if itemCurrentlyBeingSelected == nil then
         return
