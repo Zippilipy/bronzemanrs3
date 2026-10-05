@@ -113,9 +113,6 @@ local function addToAcquired(id, object, collectionPopupItem)
     if object == nil then
         return
     end
-    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
-        return
-    end
     if setOfItemsAcquired[id] ~= nil then
         return
     end
@@ -133,12 +130,7 @@ local function addToAcquired(id, object, collectionPopupItem)
         end
         return
     end
-    if not object.isTradeable then
-        return
-    end
-    if not object.isStockmarket then -- tradeables that aren't g.e. shouldn't be displayed but they should be added
-        setOfItemsAcquired[id] = ""
-        PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+    if not object.isStockmarket then
         return
     end
     setOfItemsAcquired[id] = object.name
@@ -184,24 +176,25 @@ local function shouldConsumeAreaLoot()
     if setOfItemsAcquired == nil then
         return
     end
+    -- this dung check is not needed when they fix isOwner
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return false
     end
     local nearbyItemIds = findAllNearbyItemIds()
     for _,id in ipairs(nearbyItemIds) do
         local object = config.Obj.FromID(id)
-        if setOfItemsAcquired[id] == nil and canPickUpTheseItems[id] == nil and object.isTradeable and string.sub(object.configName, 1, 4) ~= "RAND" then
+        if canPickUpTheseItems[id] == nil and string.sub(object.configName, 1, 4) ~= "RAND" then
             return true
         end
     end
     return false
 end
 
+local geOpConfig = nil
 function miniMenuReadyFunc(event)
     if setOfItemsAcquired == nil then
         return
     end
-    -- Make changes to the minimenu
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return
     end
@@ -215,10 +208,28 @@ function miniMenuReadyFunc(event)
         if entry.actionEntryType == MiniMenuEntryType.INTERFACE or entry.actionEntryType == MiniMenuEntryType.NONE then
             if selectedid ~= -1 then -- DISABLE GE
                 if setOfItemsAcquired[selectedid] == nil then
-                    if entry.verbText == "Confirm" then
-                        idxA = i
-                    elseif entry.actionVerbType == MiniMenuActionVerbType.UNSPECIFIED then
-                        idxB = i
+                    local componentData = entry.componentData
+                    if not componentData or not componentData.component then 
+                        goto continue
+                    end
+                    for opIndex = 0, 9 do 
+                        if componentData.component.opConfig:GetOpName(opIndex) == "Confirm" then
+                            geOpConfig = componentData.component.opConfig
+                            geOpConfig:SetOpIDHidden(opIndex, true)
+                        end
+                    end
+                else
+                    local componentData = entry.componentData
+                    if componentData and componentData.component then
+                        geOpConfig = componentData.component.opConfig
+                    end
+                    if geOpConfig == nil then
+                        goto continue
+                    end
+                    for opIndex = 0, 9 do
+                        if geOpConfig:GetOpName(opIndex) == "Confirm" then
+                            geOpConfig:SetOpIDHidden(opIndex, false)
+                        end
                     end
                 end
             else
@@ -234,18 +245,18 @@ function miniMenuReadyFunc(event)
                     if string.sub(object.configName, 1, 4) == "RAND" then
                         goto continue
                     end
-                    if not object.isTradeable then
-                        goto continue
-                    end
-                    if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
-                        -- For some reason the actionVerbType of Examine is not EXAMINE but is OP???
-                        -- So I will have to check the string :(
-                        -- string.sub(entry.verbText, 1, 1) is probably faster and just check "T" and "E" but it's probably so minor who cares
-                        local verb = string.lower(string.sub(entry.verbText, 1, 4))
-                        if verb == "take" then
-                            idxA = i
-                        elseif verb == "exam" then
-                            idxB = i
+                    if canPickUpTheseItems[object.id] == nil then
+                        if entry.actionVerbType == MiniMenuActionVerbType.OP then
+                            local componentData = entry.componentData
+                            if not componentData or not componentData.component then
+                                goto continue
+                            end
+                            for opIndex = 0, 9 do
+                                local arealootOpConfig = componentData.component.opConfig
+                                if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
+                                    arealootOpConfig:SetOpIDHidden(opIndex, true)
+                                end
+                            end
                         end
                     end
                 end
@@ -255,13 +266,12 @@ function miniMenuReadyFunc(event)
                 goto continue
             end
             local object = entry.objData.config
-            if not object.isTradeable then -- you should be able to pick up your own untradeable stuff
-                goto continue
-            end
             if string.sub(object.configName, 1, 4) == "RAND" then
                 goto continue
             end
-            if setOfItemsAcquired[object.id] == nil and canPickUpTheseItems[object.id] == nil then
+            if canPickUpTheseItems[object.id] == nil then
+                -- SetOpIDHidden isn't possible since this entry doesn't have an associated componentData
+                -- So we use :Swap()
                 if entry.actionVerbType == MiniMenuActionVerbType.OP then
                     idxA = i
                 elseif entry.actionVerbType == MiniMenuActionVerbType.EXAMINE then
@@ -275,15 +285,15 @@ function miniMenuReadyFunc(event)
 end
 Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 
--- addToItemAcquiredFromDrop and addToItemAcquiredFromDropChanged both add from items on the ground
--- I need a way to check ownership of the drop, right now it just counts anything on the ground
 local function addToItemAcquiredFromDrop(event)
+    log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if event.isOwner then
         canPickUpTheseItems[event.objType.id] = event.objType
     end
 end
 Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
 local function addToItemAcquiredFromDropChanged(event)
+    log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if not event.isOwner then
         return
     end
@@ -361,7 +371,7 @@ local function initializeComponents()
     end
 end
 
-Event.ServerLogic.Subscribe("initializeComponents", initializeComponents)
+Event.Logic.Subscribe("initializeComponents", initializeComponents)
 
 local hasHitADynamic = false
 local function isTheLootInterfaceOpen()
@@ -466,12 +476,12 @@ local function addAllItemsFromTheBank(event)
                     if handlePotions(potionStruct, setOfItemsAcquired).isNewAddition then
                         count = count + 1
                     end
-                elseif not object.isTradeable then
+                elseif not object.isStockmarket then
                     local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
                     if weaponStruct ~= nil then
                         local weaponNew = weaponStruct:HasParam(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) and weaponStruct:GetParamValue(config.Param.COMBATV2_SPECIAL_ATTACK_BASE_ITEM) or nil
                         if weaponNew ~= nil then
-                            if weaponNew.isTradeable then
+                            if weaponNew.isStockmarket then
                                 if setOfItemsAcquired[weaponNew.id] ~= nil then
                                     count = count + 1
                                     setOfItemsAcquired[weaponNew.id] = weaponNew.name
@@ -720,7 +730,7 @@ local function disableConfirmButton()
     selectedid = itemCurrentlyBeingSelected.associatedObjectID
 end
 
-Event.ServerLogic.Subscribe("disableConfirmButton", disableConfirmButton)
+Event.Logic.Subscribe("disableConfirmButton", disableConfirmButton)
 
 function PluginShutdown()
     if loot_all_component ~= nil then

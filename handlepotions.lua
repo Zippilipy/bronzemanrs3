@@ -51,7 +51,7 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
             goto continue
         end
         local objectConfig = potionStruct:GetParamValue(v)
-        if not objectConfig.isTradeable then
+        if not objectConfig.isStockmarket then
             goto continue
         end
         local dose = doseIndexById[v.id]
@@ -92,7 +92,7 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
             local idConfig = potionStruct:GetParamValue(v).id
             local itemConfig = potionStruct:GetParamValue(v).name
             if v.id ~= bestPotionDoseNumberId then
-                if objectConfig.isTradeable then
+                if objectConfig.isStockmarket then
                     setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
                 end
             else

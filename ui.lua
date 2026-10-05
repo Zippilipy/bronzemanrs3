@@ -38,7 +38,6 @@ end
 
 local defaultSettings = {
     shouldShowUnobtainedItems = "off",
-    pkingAllowed = "off",
     showIcon = "on",
 }
 
@@ -50,7 +49,6 @@ end
 
 
 local shouldShowUnobtainedItems = settings["shouldShowUnobtainedItems"] == "on"
-local pkingAllowed = settings["pkingAllowed"] == "on"
 local showIcon = settings["showIcon"] == "on"
 
 local pluginresource = Plugin.resources.images.icon.bronzemanicon
@@ -530,7 +528,7 @@ function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllI
     aboutThisPluginView:AddText("2. Restricts you from being able to pick up items that have not been unlocked")
     aboutThisPluginView:AddText("3. Trading is disabled, except being able to be traded bonds, for unlocking membership")
     aboutThisPluginView:AddText("What counts as an unlock?").font = id.Font.MUSEO_SANS_17PT_BOLD
-    aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking if desired (see Settings)")
+    aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking")
     aboutThisPluginView:AddText("Items can be unlocked without requiring the level to normally obtain it through skilling")
     aboutThisPluginView:AddText("This means you can unlock a potion that you don't have the skill level for")
     aboutThisPluginView:AddText("Unlocking a potion unlocks all potion doses that are tradeable on the Grand Exchange")
@@ -551,6 +549,7 @@ function UI:resetIconStuff()
     resetIconStuff()
 end
 
+local hasDestroyed = false
 function OpenWindow(root_layer)
     local double_confirm = false
     view = prettyui.SimpleView.new(root_layer, {
@@ -573,21 +572,6 @@ function OpenWindow(root_layer)
             shouldShowUnobtainedItems = value == "on"
             PersistentDB:Set("settings", settings)
             UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
-        end,
-        inline = true,
-    })
-
-    view:AddText("Should PKing unlock items? (currently does nothing)", { inline = true })
-
-    view:AddRadioButton({
-        { text = "On", value = "on" },
-        { text = "Off", value = "off" },
-    }, {
-        selectedValue = settings["pkingAllowed"],
-        onChange = function(group, value)
-            settings["pkingAllowed"] = value
-            pkingAllowed = value == "on"
-            PersistentDB:Set("settings", settings)
         end,
         inline = true,
     })
@@ -618,7 +602,6 @@ function OpenWindow(root_layer)
     local countedTen = false
     local resetbutton
     local red = Vector4.new(255, 0, 0, 1)
-    local hasDestroyed = false
     local function countTenTicks(event)
         countingTicks = countingTicks + 1
         if resetbutton.content == nil then
@@ -654,8 +637,12 @@ function OpenWindow(root_layer)
             end
         end
     end)
-    resetbutton.content.content = "Reset the bronzeman collection"
-    resetbutton.content.colour = red
+    if hasDestroyed then
+        resetbutton.content.content = "Restart the plugin for the effects to take place"
+    else
+        resetbutton.content.content = "Reset the bronzeman collection"
+        resetbutton.content.colour = red
+    end
 end
 
 function UI:OpenWindow(root_layer)
