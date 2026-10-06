@@ -10,10 +10,15 @@ local canPickUpTheseItems = {}
 local Queue = require("queue")
 local UI = require("ui")
 local selectedid = -1
+local exceptionIds = {
+    [id.Obj.LRC2_BOSS_WEAPON_P1] = true,
+    [id.Obj.LRC2_BOSS_WEAPON_P2] = true,
+    [id.Obj.LRC2_BOSS_WEAPON_P3] = true,
+    [id.Obj.LRC2_BOSS_WEAPON_COMPLETE] = true,
+}
 
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
-
 -- add all tradeable items and tradeable potiondoses (see handlepotions.lua) to setOfAllItems
 do
     local nilcounter = 0
@@ -145,30 +150,6 @@ end
 
 local isShowingAreaLoot = false
 
--- find all items in a 7 tile range for area loot
--- returns a list of item ids, the same type of ids stored in setOfItemsAcquired
-local function findAllNearbyItemIds()
-    local nearbyItemIds = {}
-    local player = Player.GetEntity()
-    if player == nil then 
-        return nearbyItemIds
-    end
-    local coordGrid = player.coordGrid
-    local allObjects = ObjStackList.ByDistance(coordGrid, 11) -- area loot is 7 tiles
-    if #allObjects == 0 then 
-        return nearbyItemIds
-    end
-    for _,objStackEntity in ipairs(allObjects) do
-        for i=1,objStackEntity.stackSize do
-            local entry = objStackEntity:GetEntry(i)
-            local name = entry.config.configName
-            local id = entry.config.id
-            table.insert(nearbyItemIds, id)
-        end
-    end
-    return nearbyItemIds
-end
-
 -- uses findAllNearbyItemIds to determine whether or not the area loot event should be consumed
 -- returns true if it should be consumed, that is, the event should not be sent to the server
 -- returns false if it should not be consumed and will continue to the server
@@ -180,10 +161,30 @@ local function shouldConsumeAreaLoot()
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return false
     end
-    local nearbyItemIds = findAllNearbyItemIds()
-    for _,id in ipairs(nearbyItemIds) do
-        local object = config.Obj.FromID(id)
-        if canPickUpTheseItems[id] == nil and string.sub(object.configName, 1, 4) ~= "RAND" then
+    local player = Player.GetEntity()
+    if player == nil then 
+        return false
+    end
+    local coordGrid = player.coordGrid
+    local allObjects = ObjStackList.ByDistance(coordGrid, 11) -- area loot is 7 tiles
+    local countIds = {}
+    for id, count in pairs(canPickUpTheseItems) do
+        countIds[id] = 0
+    end
+    for _, x in ipairs(allObjects) do
+        for i = 1, x.stackSize do
+            local id = x:GetEntry(i).config.id
+            if countIds[id] == nil then
+                countIds[id] = 0
+            end
+            countIds[id] = countIds[id] + 1
+        end
+    end
+    for i, icount in pairs(countIds) do
+        if canPickUpTheseItems[i] == nil then
+            return true
+        end
+        if icount > canPickUpTheseItems[i] then
             return true
         end
     end
@@ -204,6 +205,10 @@ function miniMenuReadyFunc(event)
     end
     local idxA = 0
     local idxB = 0
+    local countIds = {}
+    for id, count in pairs(canPickUpTheseItems) do
+        countIds[id] = 0
+    end
     for i, entry in pairs(entries) do
         if entry.actionEntryType == MiniMenuEntryType.INTERFACE or entry.actionEntryType == MiniMenuEntryType.NONE then
             if selectedid ~= -1 then -- DISABLE GE
@@ -245,7 +250,7 @@ function miniMenuReadyFunc(event)
                     if string.sub(object.configName, 1, 4) == "RAND" then
                         goto continue
                     end
-                    if canPickUpTheseItems[object.id] == nil then
+                    if canPickUpTheseItems[object.id] == nil or canPickUpTheseItems[object.id] == 0 then
                         if entry.actionVerbType == MiniMenuActionVerbType.OP then
                             local componentData = entry.componentData
                             if not componentData or not componentData.component then
@@ -255,6 +260,19 @@ function miniMenuReadyFunc(event)
                                 local arealootOpConfig = componentData.component.opConfig
                                 if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
                                     arealootOpConfig:SetOpIDHidden(opIndex, true)
+                                end
+                            end
+                        end
+                    else
+                        if entry.actionVerbType == MiniMenuActionVerbType.OP then
+                            local componentData = entry.componentData
+                            if not componentData or not componentData.component then
+                                goto continue
+                            end
+                            for opIndex = 0, 9 do
+                                local arealootOpConfig = componentData.component.opConfig
+                                if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
+                                    arealootOpConfig:SetOpIDHidden(opIndex, false)
                                 end
                             end
                         end
@@ -269,7 +287,19 @@ function miniMenuReadyFunc(event)
             if string.sub(object.configName, 1, 4) == "RAND" then
                 goto continue
             end
-            if canPickUpTheseItems[object.id] == nil then
+            local id = object.id
+            local allowPickup = false
+            if countIds[id] == nil then
+                countIds[id] = 1
+            else
+                countIds[id] = countIds[id] + 1
+            end
+            if canPickUpTheseItems[id] == nil then
+                allowPickup = false
+            else
+                allowPickup = countIds[id] <= canPickUpTheseItems[id]
+            end
+            if not allowPickup then
                 -- SetOpIDHidden isn't possible since this entry doesn't have an associated componentData
                 -- So we use :Swap()
                 if entry.actionVerbType == MiniMenuActionVerbType.OP then
@@ -286,21 +316,38 @@ end
 Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 
 local function addToItemAcquiredFromDrop(event)
-    log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
+    --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
+    if exceptionIds[event.objType.id] then
+        canPickUpTheseItems[event.objType.id] = 1
+        return
+    end
     if event.isOwner then
-        canPickUpTheseItems[event.objType.id] = event.objType
+        local old = 0
+        if canPickUpTheseItems[event.objType.id] ~= nil then
+            old = canPickUpTheseItems[event.objType.id]
+        end
+        canPickUpTheseItems[event.objType.id] = old + 1
+        --log(string.format("Updated %s to %d", event.objType.name, old + 1))
     end
 end
 Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
 local function addToItemAcquiredFromDropChanged(event)
-    log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
+    --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
+    if exceptionIds[event.objType.id] then
+        canPickUpTheseItems[event.objType.id] = 1
+        return
+    end
     if not event.isOwner then
         return
     end
     if event.oldCount > event.newCount then
         return
     end
-    canPickUpTheseItems[event.objType.id] = event.objType
+    local old = 0
+    if canPickUpTheseItems[event.objType.id] ~= nil then
+        old = canPickUpTheseItems[event.objType.id]
+    end
+    canPickUpTheseItems[event.objType.id] = old + 1
 end
 Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
 
@@ -351,6 +398,36 @@ end
 
 local initializeLootButtons = false
 local initializeAcceptButton = false
+local function shouldShowAreaLoot()
+    if not initialized then
+        return
+    end
+    if not isShowingAreaLoot then
+        return
+    end
+    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
+        return
+    end
+    local shouldShow = not shouldConsumeAreaLoot()
+    if isShowingLootButton then
+        if shouldShow then
+            
+        else
+            -- this hides the components, which also makes it so that the user cannot click on them or
+            -- use the keyboard to activate the area loot button
+            loot_all_component:SetPos(loot_all_component.position.x + 100, loot_all_component.position.y + 100)
+            loot_custom_component:SetPos(loot_custom_component.position.x + 100, loot_custom_component.position.y + 100)
+            isShowingLootButton = false
+        end
+    else
+        if shouldShow then
+            loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
+            loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
+            isShowingLootButton = true
+        end
+    end
+end
+Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)
 local function initializeComponents()
     if initializeAcceptButton then
         accept_button = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__ACCEPT_BUTTON_LAYER)
@@ -368,6 +445,7 @@ local function initializeComponents()
         initializeLootButtons = false
         initialized = true
         isShowingLootButton = true
+        shouldShowAreaLoot()
     end
 end
 
@@ -420,37 +498,6 @@ local function lootInvClosed(event)
     end
 end
 Event.InventoryRemoved.Subscribe("lootInvClosed", lootInvClosed)
-
-local function shouldShowAreaLoot()
-    if not initialized then
-        return
-    end
-    if not isShowingAreaLoot then
-        return
-    end
-    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
-        return
-    end
-    local shouldShow = not shouldConsumeAreaLoot()
-    if isShowingLootButton then
-        if shouldShow then
-            
-        else
-            -- this hides the components, which also makes it so that the user cannot click on them or
-            -- use the keyboard to activate the area loot button
-            loot_all_component:SetPos(loot_all_component.position.x + 100, loot_all_component.position.y + 100)
-            loot_custom_component:SetPos(loot_custom_component.position.x + 100, loot_custom_component.position.y + 100)
-            isShowingLootButton = false
-        end
-    else
-        if shouldShow then
-            loot_all_component:SetPos(loot_all_pos_x, loot_all_pos_y)
-            loot_custom_component:SetPos(loot_custom_pos_x, loot_custom_pos_y)
-            isShowingLootButton = true
-        end
-    end
-end
-Event.ServerLogic.Subscribe("shouldShowAreaLoot", shouldShowAreaLoot)
 
 local function addAllItemsFromTheBank(event)
     if setOfItemsAcquired == nil then
@@ -562,6 +609,9 @@ local function addAllItemsNewInTheInventory(event)
                 item = slot.obj,
                 y = 50,
             }
+            if canPickUpTheseItems[id] then
+                canPickUpTheseItems[id] = canPickUpTheseItems[id] - 1
+            end
             addToAcquired(id, slot.obj, collectionPopupItem)
         end
     end
@@ -726,6 +776,9 @@ local function disableConfirmButton()
         return
     else
         itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(154)
+        if itemCurrentlyBeingSelected == nil then
+            return
+        end
     end
     selectedid = itemCurrentlyBeingSelected.associatedObjectID
 end
