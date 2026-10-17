@@ -15,11 +15,13 @@ local exceptionIds = {
     [id.Obj.LRC2_BOSS_WEAPON_P2] = true,
     [id.Obj.LRC2_BOSS_WEAPON_P3] = true,
     [id.Obj.LRC2_BOSS_WEAPON_COMPLETE] = true,
+    [id.Obj.RAID1_WATERBOSS_PLANK] = true,
 }
 
 local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
 -- add all tradeable items and tradeable potiondoses (see handlepotions.lua) to setOfAllItems
+
 do
     local nilcounter = 0
     local i = 0
@@ -111,7 +113,7 @@ local counterForCollectionPopup = 0
 -- collectionPopupQueue is a queue for the achievement popup, making it go every 5 ticks with counterForCollectionPopup
 local collectionPopupQueue = Queue.new()
 
-local function addToAcquired(id, object, collectionPopupItem)
+local function addToAcquired(id, object, createPopup)
     if setOfItemsAcquired == nil then
         return
     end
@@ -126,7 +128,7 @@ local function addToAcquired(id, object, collectionPopupItem)
         local potion = handlePotions(potionStruct, setOfItemsAcquired)
         if potion.isNewAddition then
         local collectionPopup = potion.collectionPopupItem
-            if collectionPopupItem ~= nil then
+            if createPopup then
                 collectionPopupQueue:enqueue(collectionPopup)
             end
         end
@@ -136,10 +138,24 @@ local function addToAcquired(id, object, collectionPopupItem)
         return
     end
     if not object.isStockmarket then
-        return
+        local configName = object.configName
+        if string.sub(configName, 1, 5) == "CERT_" then
+            local nameWithoutCert = string.sub(configName, 6, string.len(configName))
+            local objectWithoutCert = config.Obj[nameWithoutCert]
+            addToAcquired(objectWithoutCert.id, objectWithoutCert, createPopup)
+            return
+        else
+            return
+        end
     end
     setOfItemsAcquired[id] = object.name
-    if collectionPopupItem ~= nil then
+    if createPopup then
+        local collectionPopupItem = {
+            title = "Bronzeman log",
+            text = string.format("New item obtained: %s", object.name),
+            item = object,
+            y = 50,
+        }
         collectionPopupQueue:enqueue(collectionPopupItem)
     end
     PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
@@ -155,10 +171,6 @@ local isShowingAreaLoot = false
 -- returns false if it should not be consumed and will continue to the server
 local function shouldConsumeAreaLoot()
     if setOfItemsAcquired == nil then
-        return
-    end
-    -- this dung check is not needed when they fix isOwner
-    if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return false
     end
     local player = Player.GetEntity()
@@ -173,11 +185,16 @@ local function shouldConsumeAreaLoot()
     end
     for _, x in ipairs(allObjects) do
         for i = 1, x.stackSize do
-            local id = x:GetEntry(i).config.id
+            local config = x:GetEntry(i).config
+            if not config.isTradeable then
+                goto continue
+            end
+            local id = config.id
             if countIds[id] == nil then
                 countIds[id] = 0
             end
             countIds[id] = countIds[id] + 1
+            ::continue::
         end
     end
     for i, icount in pairs(countIds) do
@@ -247,6 +264,9 @@ function miniMenuReadyFunc(event)
                     if object == nil then
                         goto continue
                     end
+                    if not object.isTradeable then
+                        goto continue
+                    end
                     if string.sub(object.configName, 1, 4) == "RAND" then
                         goto continue
                     end
@@ -284,6 +304,9 @@ function miniMenuReadyFunc(event)
                 goto continue
             end
             local object = entry.objData.config
+            if not object.isTradeable then
+                goto continue
+            end
             if string.sub(object.configName, 1, 4) == "RAND" then
                 goto continue
             end
@@ -318,7 +341,11 @@ Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 local function addToItemAcquiredFromDrop(event)
     --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if exceptionIds[event.objType.id] then
-        canPickUpTheseItems[event.objType.id] = 1
+        local old = 0
+        if canPickUpTheseItems[event.objType.id] ~= nil then
+            old = canPickUpTheseItems[event.objType.id]
+        end
+        canPickUpTheseItems[event.objType.id] = old + 1
         return
     end
     if event.isOwner then
@@ -330,7 +357,7 @@ local function addToItemAcquiredFromDrop(event)
         --log(string.format("Updated %s to %d", event.objType.name, old + 1))
     end
 end
-Event.ObjStackEntityAdded.Subscribe("dropEvent", addToItemAcquiredFromDrop)
+Event.ObjStackEntityAdded.Subscribe("addToItemAcquiredFromDrop", addToItemAcquiredFromDrop)
 local function addToItemAcquiredFromDropChanged(event)
     --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if exceptionIds[event.objType.id] then
@@ -349,7 +376,7 @@ local function addToItemAcquiredFromDropChanged(event)
     end
     canPickUpTheseItems[event.objType.id] = old + 1
 end
-Event.ObjStackEntityChanged.Subscribe("dropEvent", addToItemAcquiredFromDropChanged)
+Event.ObjStackEntityChanged.Subscribe("addToItemAcquiredFromDropChanged", addToItemAcquiredFromDropChanged)
 
 -- Here's my super duper non-threading solution to simultaneous collectionPopupEvents, I store them in a queue
 -- then dequeue every 5 ticks
@@ -405,6 +432,7 @@ local function shouldShowAreaLoot()
     if not isShowingAreaLoot then
         return
     end
+    -- check if they are in dungeoneering
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return
     end
@@ -603,16 +631,13 @@ local function addAllItemsNewInTheInventory(event)
     for _, slot in ipairs(slots) do
         local id = slot.obj.id
         if id ~= -1 then
-            local collectionPopupItem = {
-                title = "Bronzeman log",
-                text = string.format("New item obtained: %s", slot.obj.name),
-                item = slot.obj,
-                y = 50,
-            }
             if canPickUpTheseItems[id] then
                 canPickUpTheseItems[id] = canPickUpTheseItems[id] - 1
+                if canPickUpTheseItems[id] < 0 then
+                    canPickUpTheseItems[id] = 0
+                end
             end
-            addToAcquired(id, slot.obj, collectionPopupItem)
+            addToAcquired(id, slot.obj, true)
         end
     end
 end
@@ -634,7 +659,7 @@ local function addAllItemsInTheInventory()
     for _, slot in ipairs(slots) do
         local id = slot.obj.id
         if id ~= -1 then
-            addToAcquired(id, slot.obj, nil)
+            addToAcquired(id, slot.obj, false)
             local newSizeOfAcquired = 0
             for _ in pairs(setOfItemsAcquired) do
                 newSizeOfAcquired = newSizeOfAcquired + 1
