@@ -127,7 +127,7 @@ local function addToAcquired(id, object, createPopup)
     if potionStruct then
         local potion = handlePotions(potionStruct, setOfItemsAcquired)
         if potion.isNewAddition then
-        local collectionPopup = potion.collectionPopupItem
+            local collectionPopup = potion.collectionPopupItem
             if createPopup then
                 collectionPopupQueue:enqueue(collectionPopup)
             end
@@ -139,6 +139,7 @@ local function addToAcquired(id, object, createPopup)
     end
     if not object.isStockmarket then
         local configName = object.configName
+        -- Is the item noted? If so, do the check again but for the unnoted item.
         if string.sub(configName, 1, 5) == "CERT_" then
             local nameWithoutCert = string.sub(configName, 6, string.len(configName))
             local objectWithoutCert = config.Obj[nameWithoutCert]
