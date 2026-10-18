@@ -16,6 +16,7 @@ local exceptionIds = {
     [id.Obj.LRC2_BOSS_WEAPON_P3] = true,
     [id.Obj.LRC2_BOSS_WEAPON_COMPLETE] = true,
     [id.Obj.RAID1_WATERBOSS_PLANK] = true,
+    [id.Obj.WILDERNESS_WEAPON_RANGED] = true,
 }
 
 local potionHandler = require("handlepotions")
@@ -63,7 +64,6 @@ local function obtainPlayerTrackingID()
             acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
             setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
             if setOfItemsAcquired == nil then
-                log("Persistent DB for setOfItemsAcquired was nil!")
                 setOfItemsAcquired = {}
                 setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
                 PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
@@ -78,7 +78,6 @@ else
     acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
     setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
     if setOfItemsAcquired == nil then
-        log("Persistent DB for setOfItemsAcquired was nil!")
         setOfItemsAcquired = {}
         setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
         PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
@@ -340,7 +339,6 @@ end
 Event.MiniMenuReady.Subscribe("myEvent", miniMenuReadyFunc)
 
 local function addToItemAcquiredFromDrop(event)
-    --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if exceptionIds[event.objType.id] then
         local old = 0
         if canPickUpTheseItems[event.objType.id] ~= nil then
@@ -355,12 +353,10 @@ local function addToItemAcquiredFromDrop(event)
             old = canPickUpTheseItems[event.objType.id]
         end
         canPickUpTheseItems[event.objType.id] = old + 1
-        --log(string.format("Updated %s to %d", event.objType.name, old + 1))
     end
 end
 Event.ObjStackEntityAdded.Subscribe("addToItemAcquiredFromDrop", addToItemAcquiredFromDrop)
 local function addToItemAcquiredFromDropChanged(event)
-    --log(string.format("Saw %s drop, event.isOwner = %s", event.objType.name, tostring(event.isOwner)))
     if exceptionIds[event.objType.id] then
         canPickUpTheseItems[event.objType.id] = 1
         return
@@ -702,7 +698,7 @@ local function disableAcceptIfNotBond(event)
             if component.type == ui.ComponentType.SPRITE then
                 local objid = component.associatedObjectID
                 if objid ~= -1 then
-                    if objid ~= id.Obj.REDBERRIES then
+                    if objid ~= id.Obj.RS_BOND then
                         if not should_block then
                             accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
                         end
@@ -748,51 +744,6 @@ end
 
 Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitch)
 
-local function printAllChildrens(input, static, level)
-    if static then
-        input:IterateStaticComponents(
-            function (component, visible)
-                log(string.format("Found static component with id: %d type: %d at level: %d, visibility: %s", component.staticID, component.type, level, tostring(visible)))
-                if component.type == ui.ComponentType.SPRITE then
-                    local id = component.associatedObjectID
-                    if id ~= -1 then
-                        if setOfItemsAcquired[id] ~= nil then
-                            log(string.format("You are allowed to buy %s", config.Obj.FromID(id).name))
-                        else
-                            log(string.format("You are NOT allowed to buy %s", config.Obj.FromID(id).name))
-                        end
-                    end
-                end
-                if component.type == ui.ComponentType.LAYER then
-                    printAllChildrens(component, true, level+1)
-                    printAllChildrens(component, false, level+1)
-                end
-            return false
-            end)
-    else 
-        input:IterateDynamicComponents(
-            function (component, visible)
-                log(string.format("Found dynamic component with id: %d type: %d at level: %d, visibility: %s", component.dynamicID, component.type, level, tostring(visible)))
-                    if component.type == ui.ComponentType.SPRITE then
-                    local id = component.associatedObjectID
-                    if id ~= -1 then
-                        if setOfItemsAcquired[id] ~= nil then
-                            log(string.format("You are allowed to buy %s", config.Obj.FromID(id).name))
-                        else
-                            log(string.format("You are NOT allowed to buy %s", config.Obj.FromID(id).name))
-                        end
-                    end
-                end
-            return false
-            end)
-    end
-end
-
-local function printAllChildren(input)
-    printAllChildrens(input, true, 0)
-    printAllChildrens(input, false, 0)
-end
-
 local function disableConfirmButton()
     if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
         return
@@ -801,6 +752,7 @@ local function disableConfirmButton()
     if itemCurrentlyBeingSelected == nil then
         return
     else
+        -- Magic number, this selectes the child that represents the object
         itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(154)
         if itemCurrentlyBeingSelected == nil then
             return
