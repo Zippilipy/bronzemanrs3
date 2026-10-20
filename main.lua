@@ -1,7 +1,7 @@
 -- establish important global variables
 -- game window, is the game window
--- ExecuteConsoleCommand("ppr bronzeman")
--- ExecuteConsoleCommand("ppe bronzeman trackingAccess")
+ExecuteConsoleCommand("ppr bronzeman")
+ExecuteConsoleCommand("ppe bronzeman trackingAccess")
 local game_window = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
 -- setOfItemsAcquired is a table mapping ids to <name> or nil, <name> means you have acquired said item, nil means you haven't
 -- for a more in depth description of setOfItemsAcquired, see handlepotions.lua
