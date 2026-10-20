@@ -747,6 +747,7 @@ Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitc
 
 local function disableConfirmButton()
     if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
+        selectedid = -1
         return
     end
     local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
