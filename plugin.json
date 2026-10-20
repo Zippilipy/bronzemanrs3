@@ -2,8 +2,8 @@
     "name": "bronzeman",
     "version": "1.0",
     "contactEmailAddress": ["zippilipy@gmail.com"],
-    "requiredPermissions": [ "trackingAccess" ],
-    "optionalPermissions": [  ],
+    "requiredPermissions": [  ],
+    "optionalPermissions": [ "trackingAccess" ],
 	"requiredDependencies": {
       "prettyui" : 6398181 
     },
