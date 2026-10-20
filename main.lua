@@ -130,9 +130,10 @@ local function addToAcquired(id, object, createPopup)
             if createPopup then
                 collectionPopupQueue:enqueue(collectionPopup)
             end
-        end
-        if UIHasLoaded then
-            UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+            PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+            if UIHasLoaded then
+                UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
+            end
         end
         return
     end
