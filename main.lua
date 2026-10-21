@@ -208,8 +208,6 @@ local function shouldConsumeAreaLoot()
     return false
 end
 
-local selectedid = -1
-local geOpConfig = nil
 function miniMenuReadyFunc(event)
     if setOfItemsAcquired == nil then
         return
@@ -228,79 +226,50 @@ function miniMenuReadyFunc(event)
         countIds[id] = 0
     end
     for i, entry in pairs(entries) do
-        if entry.actionEntryType == MiniMenuEntryType.INTERFACE or entry.actionEntryType == MiniMenuEntryType.NONE then
-            if selectedid ~= -1 then -- DISABLE GE
-                if setOfItemsAcquired[selectedid] == nil then
+        if entry.actionEntryType == MiniMenuEntryType.INTERFACE then
+            -- AREA LOOT
+            if not isShowingAreaLoot then
+                goto continue
+            end
+            local object = entry.componentData.objConfig
+            if object == nil then
+                goto continue
+            end
+            if not object.isTradeable then
+                goto continue
+            end
+            if string.sub(object.configName, 1, 4) == "RAND" then
+                goto continue
+            end
+            if canPickUpTheseItems[object.id] == nil or canPickUpTheseItems[object.id] == 0 then
+                if entry.actionVerbType == MiniMenuActionVerbType.OP then
                     local componentData = entry.componentData
-                    if not componentData or not componentData.component then 
-                        goto continue
-                    end
-                    for opIndex = 0, 9 do 
-                        if componentData.component.opConfig:GetOpName(opIndex) == "Confirm" then
-                            geOpConfig = componentData.component.opConfig
-                            geOpConfig:SetOpIDHidden(opIndex, true)
-                        end
-                    end
-                else
-                    local componentData = entry.componentData
-                    if componentData and componentData.component then
-                        geOpConfig = componentData.component.opConfig
-                    end
-                    if geOpConfig == nil then
+                    if not componentData or not componentData.component then
                         goto continue
                     end
                     for opIndex = 0, 9 do
-                        if geOpConfig:GetOpName(opIndex) == "Confirm" then
-                            geOpConfig:SetOpIDHidden(opIndex, false)
+                        local arealootOpConfig = componentData.component.opConfig
+                        if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
+                            arealootOpConfig:SetOpIDHidden(opIndex, true)
                         end
                     end
                 end
             else
-                if entry.actionEntryType == MiniMenuEntryType.INTERFACE then
-                    -- AREA LOOT
-                    if not isShowingAreaLoot then
+                if entry.actionVerbType == MiniMenuActionVerbType.OP then
+                    local componentData = entry.componentData
+                    if not componentData or not componentData.component then
                         goto continue
                     end
-                    local object = entry.componentData.objConfig
-                    if object == nil then
-                        goto continue
-                    end
-                    if not object.isTradeable then
-                        goto continue
-                    end
-                    if string.sub(object.configName, 1, 4) == "RAND" then
-                        goto continue
-                    end
-                    if canPickUpTheseItems[object.id] == nil or canPickUpTheseItems[object.id] == 0 then
-                        if entry.actionVerbType == MiniMenuActionVerbType.OP then
-                            local componentData = entry.componentData
-                            if not componentData or not componentData.component then
-                                goto continue
-                            end
-                            for opIndex = 0, 9 do
-                                local arealootOpConfig = componentData.component.opConfig
-                                if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
-                                    arealootOpConfig:SetOpIDHidden(opIndex, true)
-                                end
-                            end
-                        end
-                    else
-                        if entry.actionVerbType == MiniMenuActionVerbType.OP then
-                            local componentData = entry.componentData
-                            if not componentData or not componentData.component then
-                                goto continue
-                            end
-                            for opIndex = 0, 9 do
-                                local arealootOpConfig = componentData.component.opConfig
-                                if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
-                                    arealootOpConfig:SetOpIDHidden(opIndex, false)
-                                end
-                            end
+                    for opIndex = 0, 9 do
+                        local arealootOpConfig = componentData.component.opConfig
+                        if string.sub(arealootOpConfig:GetOpName(opIndex), 1, 4) == "Take" then
+                            arealootOpConfig:SetOpIDHidden(opIndex, false)
                         end
                     end
                 end
             end
-        else -- ITEMS ON THE GROUND
+        else
+        -- ITEMS ON THE GROUND
             if entry.actionEntryType ~= MiniMenuEntryType.OBJ then
                 goto continue
             end
@@ -801,7 +770,7 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
     if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
         return
     end
-    printAllChildren(ui.Interfaces:GetComponent(id.Component.STOCKMARKET__STOCKMARKET))
+    --printAllChildren(ui.Interfaces:GetComponent(id.Component.STOCKMARKET__STOCKMARKET))
     local searchscroll = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__SEARCH_SCROLLING)
     if searchscroll == nil then
         log("it's nil")
@@ -816,6 +785,7 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
     if componentThatIsCorrect ~= nil then
         searchscroll = componentThatIsCorrect
     end
+    log(#blockingRectangles)
     for i = #blockingRectangles, 1, -1 do
         blockingRectangles[i]:Destroy()
         blockingRectangles[i] = nil
@@ -824,7 +794,6 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
 
     searchscroll:IterateDynamicComponents(
         function (component, visible)
-            log(string.format("Found id: %d, type: %d", component.dynamicID, component.type))
             if component == nil then
                 return
             end
@@ -845,7 +814,7 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
     )
 
     for _, component in ipairs(componentsToBlock) do
-        local blocking_rectangle = ui.Rectangle.new(component.parent)
+        local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
         blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
         blocking_rectangle:SetSize(component.size.width+129, component.size.height+18)
         blocking_rectangle.enabled = true
@@ -857,26 +826,6 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
 end
 
 Event.Draw.Subscribe("drawBoxesOverUnobtaintedItemsInGe", drawBoxesOverUnobtaintedItemsInGe)
-
-local function disableConfirmButton()
-    if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
-        selectedid = -1
-        return
-    end
-    local itemCurrentlyBeingSelected = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__ITEM_AND_PRICE)
-    if itemCurrentlyBeingSelected == nil then
-        return
-    else
-        -- Magic number, this selectes the child that represents the object
-        itemCurrentlyBeingSelected = itemCurrentlyBeingSelected:GetChild(154)
-        if itemCurrentlyBeingSelected == nil then
-            return
-        end
-    end
-    selectedid = itemCurrentlyBeingSelected.associatedObjectID
-end
-
-Event.Logic.Subscribe("disableConfirmButton", disableConfirmButton)
 
 function PluginShutdown()
     if loot_all_component ~= nil then
