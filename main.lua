@@ -717,7 +717,11 @@ Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitc
 local blockingRectangles = {}
 
 local function drawBoxesOverUnobtaintedItemsInGe(event)
-    if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then
+    if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then   
+        for i = #blockingRectangles, 1, -1 do
+            blockingRectangles[i]:Destroy()
+            blockingRectangles[i] = nil
+        end
         return
     end
     local searchscroll = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__SEARCH_SCROLLING)
@@ -729,12 +733,8 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
     if searchscroll == nil then
         return
     end
-    for i = #blockingRectangles, 1, -1 do
-        blockingRectangles[i]:Destroy()
-        blockingRectangles[i] = nil
-    end
-    local componentsToBlock = {}
 
+    local componentsToBlock = {}
     searchscroll:IterateDynamicComponents(
         function (component, visible)
             if component == nil then
@@ -756,15 +756,35 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
         end
     )
 
-    for _, component in ipairs(componentsToBlock) do
-        local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
-        blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
-        blocking_rectangle:SetSize(component.size.width+129, component.size.height+18)
-        blocking_rectangle.enabled = true
-        blocking_rectangle.clickthrough = false
-        blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
-        blocking_rectangle.fill = true
-        table.insert(blockingRectangles, blocking_rectangle)
+    if #blockingRectangles == #componentsToBlock then
+        for i, component in ipairs(componentsToBlock) do
+            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
+        end
+    elseif #blockingRectangles > #componentsToBlock then
+        for i, component in ipairs(componentsToBlock) do
+            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
+        end
+        local difference = #blockingRectangles - #componentsToBlock
+        for i = #blockingRectangles, #blockingRectangles - difference + 1, -1 do
+            blockingRectangles[i]:Destroy()
+            blockingRectangles[i] = nil
+        end
+    else
+        for i = 1, #blockingRectangles, 1 do
+            local component = componentsToBlock[i]
+            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
+        end
+        for i = #blockingRectangles + 1, #componentsToBlock, 1 do
+            local component = componentsToBlock[i]
+            local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
+            blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
+            blocking_rectangle:SetSize(component.size.width+129, component.size.height+18)
+            blocking_rectangle.enabled = true
+            blocking_rectangle.clickthrough = false
+            blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
+            blocking_rectangle.fill = true
+            table.insert(blockingRectangles, blocking_rectangle)
+        end
     end
 end
 
