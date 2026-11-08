@@ -77,9 +77,6 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
         bestNumber = bestBigPotionDoseNumber + 12
     end
     if bestNumber == -1 + 12 then
-        if isExchangeable then
-            -- no best potion found, weird, shouldn't happen
-        end
         return {
             collectionPopupItem = nil,
             isNewAddition = false
