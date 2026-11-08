@@ -78,7 +78,7 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
     end
     if bestNumber == -1 + 12 then
         if isExchangeable then
-            log("no best potion found!")
+            -- no best potion found, weird, shouldn't happen
         end
         return {
             collectionPopupItem = nil,
@@ -96,7 +96,7 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
                     setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
                 end
             else
-                potionName = itemConfig:match("^(.-)%s*%(%d+%)$")
+                potionName = itemConfig:match("^(.-)%s*%(%d+%)$") -- disturbing regex, it makes "Super Restore (4)" -> "Super Restore"
                 if potionName == nil then
                     potionName = itemConfig
                 end

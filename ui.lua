@@ -30,7 +30,6 @@ local removeSetOfItemsAcquired
 
 local settings = PersistentDB:Get("settings")
 if settings == nil then
-    log("Persistent DB for settings was nil!")
     -- default settings
     settings = {}
     PersistentDB:Set("settings", settings)
@@ -39,6 +38,7 @@ end
 local defaultSettings = {
     shouldShowUnobtainedItems = "off",
     showIcon = "on",
+    allowTrading = "off",
 }
 
 for key, defaultValue in pairs(defaultSettings) do
@@ -50,6 +50,8 @@ end
 
 local shouldShowUnobtainedItems = settings["shouldShowUnobtainedItems"] == "on"
 local showIcon = settings["showIcon"] == "on"
+
+UI.settings  = settings
 
 local pluginresource = Plugin.resources.images.icon.bronzemanicon
 pluginresource:Load()
@@ -526,6 +528,7 @@ function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllI
     aboutThisPluginView:AddText("Features:").font = id.Font.MUSEO_SANS_17PT_BOLD
     aboutThisPluginView:AddText("1. Restricts buying from the Grand Exchange until the item has been unlocked, see below")
     aboutThisPluginView:AddText("2. Restricts you from being able to pick up items that have not been unlocked")
+    aboutThisPluginView:AddText("2.1. Keep in mind that you can still right click pick up something because the API does not support removing this yet, so for now the left click is swapped to examine").font = id.Font.MUSEO_SANS_11PT_REGULAR
     aboutThisPluginView:AddText("3. Trading is disabled, except being able to be traded bonds, for unlocking membership")
     aboutThisPluginView:AddText("What counts as an unlock?").font = id.Font.MUSEO_SANS_17PT_BOLD
     aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking")
@@ -598,14 +601,36 @@ function OpenWindow(root_layer)
         inline = true,
     })
 
+    view:AddText("Allow trading unlocked items? Useful for splitting", {inline = true})
+
+    view:AddRadioButton({
+        { text = "On", value = "on" },
+        { text = "Off", value = "off" },
+    }, {
+        selectedValue = settings["allowTrading"],
+        onChange = function(group, value)
+            settings["allowTrading"] = value
+            PersistentDB:Set("settings", settings)
+        end,
+        inline = true,
+    })
+
     local countingTicks = 0
     local countedTen = false
     local resetbutton
     local red = Vector4.new(255, 0, 0, 1)
+    local function makeButtonRed()
+        if resetbutton ~= nil and resetbutton.content ~= nil then
+            resetbutton.content.colour = red
+        else
+            Event.Draw.Unsubscribe("makeButtonRed")
+        end
+    end
     local function countTenTicks(event)
         countingTicks = countingTicks + 1
         if resetbutton.content == nil then
             Event.ServerLogic.Unsubscribe("countTenTicks")
+            Event.Draw.Unsubscribe("makeButtonRed")
             return
         end
         resetbutton.content.content = string.format("Are you sure? %d", 10-countingTicks)
@@ -625,7 +650,6 @@ function OpenWindow(root_layer)
         end
         if not double_confirm then
             self.content.content = "Are you sure? 10"
-            resetbutton.content.colour = red
             Event.ServerLogic.Subscribe("countTenTicks", countTenTicks)
             double_confirm = true
         else
@@ -634,9 +658,11 @@ function OpenWindow(root_layer)
                 double_confirm = false
                 removeSetOfItemsAcquired()
                 hasDestroyed = true
+                Event.Draw.Unsubscribe("makeButtonRed")
             end
         end
     end)
+    Event.Draw.Subscribe("makeButtonRed", makeButtonRed)
     if hasDestroyed then
         resetbutton.content.content = "Restart the plugin for the effects to take place"
     else

@@ -95,7 +95,7 @@ local function onSettingsLayerReady(event)
         return
     end
     if not UIHasLoaded then
-        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired)
+        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired, settings)
         UIHasLoaded = true
     else
         UI:OpenWindow(root_layer)
@@ -568,7 +568,7 @@ local function inventoryAddedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.BANK then
         addAllItemsFromTheBank(event)
-    elseif config.id == id.Inv.TRADEOFFER then
+    elseif config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
         initializeAcceptButton = true
         tradeMenuIsOpen = true
     end
@@ -578,7 +578,7 @@ Event.InventoryAdded.Subscribe("inventoryAddedSwitch", inventoryAddedSwitch)
 
 local function inventoryRemovedEvent(event)
     local config = event.inv
-    if config.id == id.Inv.TRADEOFFER then
+    if config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
         tradeMenuIsOpen = false
     end
 end
@@ -609,6 +609,7 @@ local function addAllItemsNewInTheInventory(event)
     end
 end
 
+-- add all items to setOfItemsAcquired once trackingID is granted, then unsubscribe
 local function addAllItemsInTheInventory()
     if setOfItemsAcquired == nil then
         return
@@ -661,34 +662,26 @@ local function disableAcceptIfNotBond(event)
     if not tradeMenuIsOpen then
         return
     end
+    if accept_button == nil then
+        return
+    end
     local trade_offer_layer_other = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER)
     local should_block = false
+    local allowsTrading = UI.settings["allowTrading"] == "on"
     trade_offer_layer_other:IterateDynamicComponents(
         function (component, visible)
             if component.type == ui.ComponentType.SPRITE then
                 local objid = component.associatedObjectID
                 if objid ~= -1 then
                     if objid ~= id.Obj.RS_BOND then
+                        if allowsTrading and setOfItemsAcquired[objid] ~= nil then
+                            return
+                        end
                         if not should_block then
                             accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
                         end
                         should_block = true
-                    else
                     end
-                end
-            end
-        return false
-    end)
-    local trade_offer_layer_your = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__YOUR_OFFER_LAYER)
-    trade_offer_layer_your:IterateDynamicComponents(
-        function (component, visible)
-            if component.type == ui.ComponentType.SPRITE then
-                local objid = component.associatedObjectID
-                if objid ~= -1 then
-                    if not should_block then
-                        accept_button:SetPos(accept_button.position.x + 500, accept_button.position.y + 500)
-                    end
-                    should_block = true
                 end
             end
         return false
@@ -698,7 +691,7 @@ local function disableAcceptIfNotBond(event)
     end
 end
 
-Event.ServerLogic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
+Event.Logic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
 
 local function inventoryUpdatedSwitch(event)
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
@@ -707,83 +700,137 @@ local function inventoryUpdatedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.INV then
         addAllItemsNewInTheInventory(event)
-    elseif config.id == id.Inv.TRADEOFFER then
+    elseif config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
         disableAcceptIfNotBond(event)
     end
 end
 
 Event.InventoryUpdated.Subscribe("inventoryUpdatedSwitch", inventoryUpdatedSwitch)
 
-local blockingRectangles = {}
+local blockingRectanglesSearch = {}
+local blockingRectanglesFavourite = {}
 
 local function drawBoxesOverUnobtaintedItemsInGe(event)
     if var.VarClient.TOPLEVEL_V2_OPEN_PARENT_REQUEST.value ~= 5 then   
-        for i = #blockingRectangles, 1, -1 do
-            blockingRectangles[i]:Destroy()
-            blockingRectangles[i] = nil
+        for i = #blockingRectanglesSearch, 1, -1 do
+            blockingRectanglesSearch[i]:Destroy()
+            blockingRectanglesSearch[i] = nil
+        end
+        for i = #blockingRectanglesFavourite, 1, -1 do
+            blockingRectanglesFavourite[i]:Destroy()
+            blockingRectanglesFavourite[i] = nil
         end
         return
     end
-    local searchscroll = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__SEARCH_SCROLLING)
-    if searchscroll == nil then
-        return
-    end
-    -- Magic number, it gets the layer with all the items in the search bar
-    searchscroll = searchscroll:GetChild(230)
-    if searchscroll == nil then
-        return
-    end
+    local searchscroll = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__SEARCH_OBJ)
+    local favouritescroll = ui.Interfaces:GetComponent(id.Component.STOCK_FAVOURITES__SEARCH_OBJ)
 
-    local componentsToBlock = {}
-    searchscroll:IterateDynamicComponents(
-        function (component, visible)
-            if component == nil then
-                return
-            end
+    if searchscroll ~= nil then
+        local componentsToBlockSearch = {}
+        searchscroll:IterateDynamicComponents(
+            function (component, visible)
+                if component == nil then
+                    return
+                end
 
-            if component.type == ui.ComponentType.SPRITE then
-                local asociatedid = component.associatedObjectID
-                if asociatedid ~= -1 then
-                    if setOfItemsAcquired[asociatedid] == nil then
-                        table.insert(componentsToBlock, {
-                            parent = component.parent,
-                            position = component.position,
-                            size = component.size,
-                        })
+                if component.type == ui.ComponentType.SPRITE then
+                    local asociatedid = component.associatedObjectID
+                    if asociatedid ~= -1 then
+                        if setOfItemsAcquired[asociatedid] == nil then
+                            table.insert(componentsToBlockSearch, {
+                                parent = component.parent,
+                                position = component.position,
+                                size = component.size,
+                            })
+                        end
                     end
                 end
             end
+        )
+        if #blockingRectanglesSearch == #componentsToBlockSearch then
+            for i, component in ipairs(componentsToBlockSearch) do
+                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+        elseif #blockingRectanglesSearch > #componentsToBlockSearch then
+            for i, component in ipairs(componentsToBlockSearch) do
+                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+            local difference = #blockingRectanglesSearch - #componentsToBlockSearch
+            for i = #blockingRectanglesSearch, #blockingRectanglesSearch - difference + 1, -1 do
+                blockingRectanglesSearch[i]:Destroy()
+                blockingRectanglesSearch[i] = nil
+            end
+        else
+            for i = 1, #blockingRectanglesSearch, 1 do
+                local component = componentsToBlockSearch[i]
+                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+            for i = #blockingRectanglesSearch + 1, #componentsToBlockSearch, 1 do
+                local component = componentsToBlockSearch[i]
+                local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
+                blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
+                blocking_rectangle:SetSize(component.size.width+129, component.size.height+18)
+                blocking_rectangle.enabled = true
+                blocking_rectangle.clickthrough = false
+                blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
+                blocking_rectangle.fill = true
+                table.insert(blockingRectanglesSearch, blocking_rectangle)
+            end
         end
-    )
+    end
+    -- basically same logic as before with slight variation (size is larger)
+    if favouritescroll ~= nil then
+        local componentsToBlockFavourite = {}
 
-    if #blockingRectangles == #componentsToBlock then
-        for i, component in ipairs(componentsToBlock) do
-            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
-        end
-    elseif #blockingRectangles > #componentsToBlock then
-        for i, component in ipairs(componentsToBlock) do
-            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
-        end
-        local difference = #blockingRectangles - #componentsToBlock
-        for i = #blockingRectangles, #blockingRectangles - difference + 1, -1 do
-            blockingRectangles[i]:Destroy()
-            blockingRectangles[i] = nil
-        end
-    else
-        for i = 1, #blockingRectangles, 1 do
-            local component = componentsToBlock[i]
-            blockingRectangles[i]:SetPos(component.position.x-5, component.position.y-9)
-        end
-        for i = #blockingRectangles + 1, #componentsToBlock, 1 do
-            local component = componentsToBlock[i]
-            local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
-            blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
-            blocking_rectangle:SetSize(component.size.width+129, component.size.height+18)
-            blocking_rectangle.enabled = true
-            blocking_rectangle.clickthrough = false
-            blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
-            blocking_rectangle.fill = true
-            table.insert(blockingRectangles, blocking_rectangle)
+        favouritescroll:IterateDynamicComponents(
+            function (component, visible)
+                if component == nil then
+                    return
+                end
+
+                if component.type == ui.ComponentType.SPRITE then
+                    local asociatedid = component.associatedObjectID
+                    if asociatedid ~= -1 then
+                        if setOfItemsAcquired[asociatedid] == nil then
+                            table.insert(componentsToBlockFavourite, {
+                                parent = component.parent,
+                                position = component.position,
+                                size = component.size,
+                            })
+                        end
+                    end
+                end
+            end
+        )
+        if #blockingRectanglesFavourite == #componentsToBlockFavourite then
+            for i, component in ipairs(componentsToBlockFavourite) do
+                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+        elseif #blockingRectanglesFavourite > #componentsToBlockFavourite then
+            for i, component in ipairs(componentsToBlockFavourite) do
+                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+            local difference = #blockingRectanglesFavourite - #componentsToBlockFavourite
+            for i = #blockingRectanglesFavourite, #blockingRectanglesFavourite - difference + 1, -1 do
+                blockingRectanglesFavourite[i]:Destroy()
+                blockingRectanglesFavourite[i] = nil
+            end
+        else
+            for i = 1, #blockingRectanglesFavourite, 1 do
+                local component = componentsToBlockFavourite[i]
+                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+            end
+            for i = #blockingRectanglesFavourite + 1, #componentsToBlockFavourite, 1 do
+                local component = componentsToBlockFavourite[i]
+                local blocking_rectangle = ui.Rectangle.new(component.parent.parent)
+                blocking_rectangle:SetPos(component.position.x-5, component.position.y-9)
+                blocking_rectangle:SetSize(component.size.width+196, component.size.height+18)
+                blocking_rectangle.enabled = true
+                blocking_rectangle.clickthrough = false
+                blocking_rectangle.colour = Vector4.new(0.5,0,0,0.5)
+                blocking_rectangle.fill = true
+                table.insert(blockingRectanglesFavourite, blocking_rectangle)
+            end
         end
     end
 end
