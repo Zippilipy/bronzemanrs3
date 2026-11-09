@@ -666,6 +666,9 @@ local function disableAcceptIfNotBond(event)
         return
     end
     local trade_offer_layer_other = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER)
+    if trade_offer_layer_other == nil then
+        return
+    end
     local should_block = false
     local allowsTrading = UI.settings["allowTrading"] == "on"
     trade_offer_layer_other:IterateDynamicComponents(
@@ -675,6 +678,9 @@ local function disableAcceptIfNotBond(event)
                 if objid ~= -1 then
                     if objid ~= id.Obj.RS_BOND then
                         if allowsTrading and setOfItemsAcquired[objid] ~= nil then
+                            return
+                        end
+                        if allowsTrading and objid == id.Obj.COINS then
                             return
                         end
                         if not should_block then
@@ -725,6 +731,7 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
     local searchscroll = ui.Interfaces:GetComponent(id.Component.STOCKMARKET__SEARCH_OBJ)
     local favouritescroll = ui.Interfaces:GetComponent(id.Component.STOCK_FAVOURITES__SEARCH_OBJ)
 
+    -- There is potential to make this faster by creating componentsToBlock outside the function since now the Garbage Collector will have to do a lot of work
     if searchscroll ~= nil then
         local componentsToBlockSearch = {}
         searchscroll:IterateDynamicComponents(
