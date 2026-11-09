@@ -562,29 +562,6 @@ local function addAllItemsFromTheBank(event)
     collectionPopupQueue:enqueue(collectionPopupItem)
 end
 
-local tradeMenuIsOpen = ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER) ~= nil
-
-local function inventoryAddedSwitch(event)
-    local config = event.inv
-    if config.id == id.Inv.BANK then
-        addAllItemsFromTheBank(event)
-    elseif config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
-        initializeAcceptButton = true
-        tradeMenuIsOpen = true
-    end
-end
-
-Event.InventoryAdded.Subscribe("inventoryAddedSwitch", inventoryAddedSwitch)
-
-local function inventoryRemovedEvent(event)
-    local config = event.inv
-    if config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
-        tradeMenuIsOpen = false
-    end
-end
-
-Event.InventoryRemoved.Subscribe("inventoryRemovedEvent", inventoryRemovedEvent)
-
 local function addAllItemsNewInTheInventory(event)
     local invconfig = event.inv
     local inv = Inventory.Find(invconfig)
@@ -659,9 +636,6 @@ end
 Event.ServerLogic.Subscribe("addAllItemsInTheInventory", addAllItemsInTheInventory)
 
 local function disableAcceptIfNotBond(event)
-    if not tradeMenuIsOpen then
-        return
-    end
     if accept_button == nil then
         return
     end
@@ -699,6 +673,31 @@ end
 
 Event.Logic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
 
+if ui.Interfaces:GetComponent(id.Component.TRADEMAIN__OTHER_OFFER_LAYER) ~= nil then
+    Event.Logic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
+end
+
+local function inventoryAddedSwitch(event)
+    local config = event.inv
+    if config.id == id.Inv.BANK then
+        addAllItemsFromTheBank(event)
+    elseif config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
+        initializeAcceptButton = true
+        Event.Logic.Subscribe("disableAcceptIfNotBond", disableAcceptIfNotBond)
+    end
+end
+
+Event.InventoryAdded.Subscribe("inventoryAddedSwitch", inventoryAddedSwitch)
+
+local function inventoryRemovedEvent(event)
+    local config = event.inv
+    if config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
+        Event.Logic.Unsubscribe("disableAcceptIfNotBond")
+    end
+end
+
+Event.InventoryRemoved.Subscribe("inventoryRemovedEvent", inventoryRemovedEvent)
+
 local function inventoryUpdatedSwitch(event)
     if var.VarClient.RAND_PARTY_FLOOR.value > 0 then
         return
@@ -706,8 +705,6 @@ local function inventoryUpdatedSwitch(event)
     local config = event.inv
     if config.id == id.Inv.INV then
         addAllItemsNewInTheInventory(event)
-    elseif config.id == 90 then --90 is id.Inv.TRADEOFFER but was removed from pan Inv for some reason, but the event is still in the game
-        disableAcceptIfNotBond(event)
     end
 end
 
