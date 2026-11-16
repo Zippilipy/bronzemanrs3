@@ -51,7 +51,7 @@ end
 local setOfItemsAcquired = nil
 local acquiredItemsIDName = nil
 local playerTrackingID = nil
-local UIHasLoaded = false
+local UiIsInitialized = false
 if Plugin.HasPermission(PluginPermissions.trackingAccess) then
     playerTrackingID = Player.GetTrackingID()
 end
@@ -94,15 +94,28 @@ local function onSettingsLayerReady(event)
     if setOfItemsAcquired == nil then
         return
     end
-    if not UIHasLoaded then
-        UI.load(game_window, root_layer, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired, settings)
-        UIHasLoaded = true
-    else
-        UI:OpenWindow(root_layer)
+    if not UiIsInitialized then
+        UI:initialize(game_window, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired)
+        UiIsInitialized = true
     end
+    UI:OpenWindow(root_layer)
 end
 
 Event.SettingsLayerReady.Subscribe("onSettingsLayerReady", onSettingsLayerReady)
+
+local function onContentLayerReady(event)
+    local root_layer = event.component
+    if setOfItemsAcquired == nil then
+        return
+    end
+    if not UiIsInitialized then
+        UI:initialize(game_window, setOfItemsAcquired, setOfAllItems, removeSetOfItemsAcquired)
+        UiIsInitialized = true
+    end
+    UI:OpenLog(root_layer)
+end
+
+Event.ContentLayerReady.Subscribe("onContentLayerReady", onContentLayerReady)
 
 -- counterForCollectionPopup has a value [0..4] and will show the achievement popup at value 0, then increment by one
 -- for each server tick, essentially making the collection log popup every 5 ticks.
@@ -130,7 +143,7 @@ local function addToAcquired(id, object, createPopup)
                 collectionPopupQueue:enqueue(collectionPopup)
             end
             PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
-            if UIHasLoaded then
+            if UiIsInitialized then
                 UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
             end
         end
@@ -159,7 +172,7 @@ local function addToAcquired(id, object, createPopup)
         collectionPopupQueue:enqueue(collectionPopupItem)
     end
     PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
-    if UIHasLoaded then
+    if UiIsInitialized then
         UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
     end
 end
@@ -546,7 +559,7 @@ local function addAllItemsFromTheBank(event)
         return
     end
     PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
-    if UIHasLoaded then
+    if UiIsInitialized then
         UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
     end
     local text = string.format("%d new items added", count)
@@ -852,7 +865,7 @@ function PluginShutdown()
         accept_button:SetPos(accept_button_x, accept_button_y)
     end
     UI:resetIconStuff()
-    if UIHasLoaded then
+    if UiIsInitialized then
         UI:destroyUIStuff()
     end
 end

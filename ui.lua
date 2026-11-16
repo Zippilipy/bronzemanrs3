@@ -271,7 +271,7 @@ local function updatePageNumber()
     pageNumber.content = string.format("%d/%d", page, pageCount)
 end
 
-function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllItemsParameter, removeSetOfItemsAcquiredParameter)
+function UI:initialize(game_window, setOfItemsAcquiredParameter, setOfAllItemsParameter, removeSetOfItemsAcquiredParameter)
     local base_height = 1009
     local scaleY = game_window.height / base_height
     local preset = 2
@@ -313,8 +313,6 @@ function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllI
     })
 
     settingsWindow:Close()
-
-    OpenWindow(root_layer)
 
     local tabs = settingsWindow:AddTabs({
         { text = "Collected items"},
@@ -530,6 +528,7 @@ function UI.load(game_window, root_layer, setOfItemsAcquiredParameter, setOfAllI
     aboutThisPluginView:AddText("2. Restricts you from being able to pick up items that have not been unlocked")
     aboutThisPluginView:AddText("2.1. Keep in mind that you can still right click pick up something because the API does not support removing this yet, so for now the left click is swapped to examine").font = id.Font.MUSEO_SANS_11PT_REGULAR
     aboutThisPluginView:AddText("3. Trading is disabled, except being able to be traded bonds, for unlocking membership")
+    aboutThisPluginView:AddText("3.1. Trading can be extended in the settings to allow for unlocked items and coins, to allow for splitting").font = id.Font.MUSEO_SANS_11PT_REGULAR
     aboutThisPluginView:AddText("What counts as an unlock?").font = id.Font.MUSEO_SANS_17PT_BOLD
     aboutThisPluginView:AddText("Any item that is obtained through skilling, pvming or pking")
     aboutThisPluginView:AddText("Items can be unlocked without requiring the level to normally obtain it through skilling")
@@ -678,9 +677,35 @@ function UI:OpenWindow(root_layer)
     OpenWindow(root_layer)
 end
 
+local logview
+function OpenLog(root_layer)
+    logview = prettyui.SimpleView.new(root_layer, {
+        width = root_layer.width
+    })
+
+    logview:AddSimpleButton("Bronzeman collection", function(self, active)
+        settingsWindow:Show()
+    end)
+end
+
+function UI:OpenLog(root_layer)
+    if logview ~= nil then
+        logview:Destroy()
+    end
+    OpenLog(root_layer)
+end
+
+function UI:closeSettingsWindow()
+    if settingsWindow ~= nil then
+        settingsWindow:Close()
+    end
+end
+
 function UI:destroyUIStuff()
-    destroyAllSlots()
-    settingsWindow:Destroy()
+    if settingsWindow ~= nil then
+        destroyAllSlots()
+        settingsWindow:Destroy()
+    end
 end
 
 return UI
