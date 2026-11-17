@@ -22,6 +22,78 @@ local potionHandler = require("handlepotions")
 local handlePotions = potionHandler.handlePotions
 -- add all tradeable items and tradeable potiondoses (see handlepotions.lua) to setOfAllItems
 
+-- Comments for DB code
+-- I am splitting up the table into chunks of 500 because each key is maximally allowed to be 128 KB, so I play it on the safe side
+
+-- ONLY TO BE USED WITH acquiredItemsIDName AND setOfItemsAcquired
+local function DBSet(key, value)
+    local i = 1
+    local count = 0
+    local partition = {}
+
+    for k, v in pairs(value) do
+        count = count + 1
+        partition[k] = v
+
+        if count >= 500 then
+            local new_key = key .. "_" .. tostring(i)
+            PersistentDB:Set(new_key, partition)
+            partition = {}
+            count = 0
+            i = i + 1
+        end
+    end
+
+    -- Remaining elements that don't fit neatly in the 500 chunk
+    if count > 0 then
+        local new_key = key .. "_" .. tostring(i)
+        PersistentDB:Set(new_key, partition)
+        i = i + 1
+    end
+
+    -- Delete obsolete partitions
+    local new_key = key .. "_" .. tostring(i)
+
+    -- Suppose we have 1, 2, 3, 4 existing but the new set only has partition 1, then clearly 2, 3, and 4 should be deleted
+    while PersistentDB:CheckExists(new_key) do
+        PersistentDB:Delete(new_key)
+        i = i + 1
+        new_key = key .. "_" .. tostring(i)
+    end
+end
+
+-- ONLY TO BE USED WITH acquiredItemsIDName
+local function DBGet(key)
+    local i = 1
+    local aggregate = {}
+    local new_key = key .. "_" .. tostring(i)
+    log(new_key)
+    local done = not PersistentDB:CheckExists(new_key)
+    while not done do
+        local partition = PersistentDB:Get(new_key)
+        for k, v in pairs(partition) do
+            aggregate[k] = v
+        end
+        i = i + 1
+        new_key = key .. "_" .. tostring(i)
+        done = not PersistentDB:CheckExists(new_key)
+    end
+    return aggregate
+end
+
+-- ONLY TO BE USED WITH acquiredItemsIDName
+local function DBDelete(key)
+    local i = 1
+    local new_key = key .. "_" .. tostring(i)
+
+    -- Suppose we have 1, 2, 3, 4 existing, we want to delete 1, 2, 3, 4
+    while PersistentDB:CheckExists(new_key) do
+        PersistentDB:Delete(new_key)
+        i = i + 1
+        new_key = key .. "_" .. tostring(i)
+    end
+end
+
 do
     local nilcounter = 0
     local i = 0
@@ -61,11 +133,11 @@ local function obtainPlayerTrackingID()
         playerTrackingID = Player.GetTrackingID()
         if playerTrackingID ~= nil then
             acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
-            setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
+            setOfItemsAcquired = DBGet(acquiredItemsIDName)
             if setOfItemsAcquired == nil then
                 setOfItemsAcquired = {}
                 setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
-                PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
+                DBSet(acquiredItemsIDName,setOfItemsAcquired)
             end
             Event.ServerLogic.Unsubscribe("obtainPlayerTrackingID")
         end
@@ -75,17 +147,17 @@ if playerTrackingID == nil then
     Event.ServerLogic.Subscribe("obtainPlayerTrackingID", obtainPlayerTrackingID)
 else
     acquiredItemsIDName = tostring(playerTrackingID) .. "acquiredItems"
-    setOfItemsAcquired = PersistentDB:Get(acquiredItemsIDName)
+    setOfItemsAcquired = DBGet(acquiredItemsIDName)
     if setOfItemsAcquired == nil then
         setOfItemsAcquired = {}
         setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
-        PersistentDB:Set(acquiredItemsIDName,setOfItemsAcquired)
+        DBSet(acquiredItemsIDName,setOfItemsAcquired)
     end
 end
 
 local function removeSetOfItemsAcquired()
     if acquiredItemsIDName ~= nil then
-        PersistentDB:Delete(acquiredItemsIDName)
+        DBDelete(acquiredItemsIDName)
     end
 end
 
@@ -142,7 +214,7 @@ local function addToAcquired(id, object, createPopup)
             if createPopup then
                 collectionPopupQueue:enqueue(collectionPopup)
             end
-            PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+            DBSet(acquiredItemsIDName, setOfItemsAcquired)
             if UiIsInitialized then
                 UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
             end
@@ -171,7 +243,7 @@ local function addToAcquired(id, object, createPopup)
         }
         collectionPopupQueue:enqueue(collectionPopupItem)
     end
-    PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+    DBSet(acquiredItemsIDName, setOfItemsAcquired)
     if UiIsInitialized then
         UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
     end
@@ -558,7 +630,7 @@ local function addAllItemsFromTheBank(event)
     if count == 0 then
         return
     end
-    PersistentDB:Set(acquiredItemsIDName, setOfItemsAcquired)
+    DBSet(acquiredItemsIDName, setOfItemsAcquired)
     if UiIsInitialized then
         UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
     end
