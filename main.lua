@@ -67,7 +67,6 @@ local function DBGet(key)
     local i = 1
     local aggregate = {}
     local new_key = key .. "_" .. tostring(i)
-    log(new_key)
     local done = not PersistentDB:CheckExists(new_key)
     while not done do
         local partition = PersistentDB:Get(new_key)
