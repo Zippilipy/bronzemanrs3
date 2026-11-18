@@ -1,6 +1,6 @@
 {
     "name": "Bronzeman",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "contactEmailAddress": "zippilipy@gmail.com",
     "requiredPermissions": [  ],
     "optionalPermissions": [ "trackingAccess" ],
