@@ -77,6 +77,9 @@ local function DBGet(key)
         new_key = key .. "_" .. tostring(i)
         done = not PersistentDB:CheckExists(new_key)
     end
+    if next(aggregate) == nil then
+        return nil
+    end
     return aggregate
 end
 
@@ -135,7 +138,7 @@ local function obtainPlayerTrackingID()
             setOfItemsAcquired = DBGet(acquiredItemsIDName)
             if setOfItemsAcquired == nil then
                 setOfItemsAcquired = {}
-                setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
+                --setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
                 DBSet(acquiredItemsIDName,setOfItemsAcquired)
             end
             Event.ServerLogic.Unsubscribe("obtainPlayerTrackingID")
@@ -149,7 +152,7 @@ else
     setOfItemsAcquired = DBGet(acquiredItemsIDName)
     if setOfItemsAcquired == nil then
         setOfItemsAcquired = {}
-        setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
+        --setOfItemsAcquired[id.Obj.RS_BOND] = config.Obj.RS_BOND.name
         DBSet(acquiredItemsIDName,setOfItemsAcquired)
     end
 end
@@ -202,9 +205,6 @@ local function addToAcquired(id, object, createPopup)
     if object == nil then
         return
     end
-    if setOfItemsAcquired[id] ~= nil then
-        return
-    end
     local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
     if potionStruct then
         local potion = handlePotions(potionStruct, setOfItemsAcquired)
@@ -218,6 +218,9 @@ local function addToAcquired(id, object, createPopup)
                 UI:rebuildFromSetOfAcquiredItems(setOfItemsAcquired)
             end
         end
+        return
+    end
+    if setOfItemsAcquired[id] ~= nil then
         return
     end
     if not object.isStockmarket then
@@ -594,14 +597,13 @@ local function addAllItemsFromTheBank(event)
         if id ~= -1 then
             local object = slot.obj
             if object ~= nil then
-                if setOfItemsAcquired[id] ~= nil then
-                    goto continue
-                end
                 local potionStruct = object:HasParam(config.Param.POTION_STRUCT) and object:GetParamValue(config.Param.POTION_STRUCT) or nil -- if the potion has the param, use it. otherwise make nil as not valid.
                 if potionStruct then
                     if handlePotions(potionStruct, setOfItemsAcquired).isNewAddition then
                         count = count + 1
-                    end
+                    end 
+                elseif setOfItemsAcquired[id] ~= nil then
+                    goto continue
                 elseif not object.isStockmarket then
                     local weaponStruct = object:HasParam(config.Param.INVENT_BASE_OBJECT) and object:GetParamValue(config.Param.INVENT_BASE_OBJECT) or nil
                     if weaponStruct ~= nil then
@@ -615,8 +617,6 @@ local function addAllItemsFromTheBank(event)
                             end
                         end
                     end
-                elseif not object.isStockmarket then
-                    setOfItemsAcquired[id] = ""
                 else
                     count = count + 1
                     setOfItemsAcquired[id] = slot.obj.name
@@ -674,6 +674,11 @@ end
 local function addAllItemsInTheInventory()
     if setOfItemsAcquired == nil then
         return
+    end
+    -- Adding a bond to the unlocked items was bugged at release so this will have to do
+    -- Adding it here since this code runs only once
+    if setOfItemsAcquired[id.Obj.RS_BOND] == nil then
+        addToAcquired(id.Obj.RS_BOND, config.Obj.RS_BOND, true)
     end
     local inv = Inventory.Find(config.Inv.INV)
     if not inv.isValid then
@@ -837,11 +842,17 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
         )
         if #blockingRectanglesSearch == #componentsToBlockSearch then
             for i, component in ipairs(componentsToBlockSearch) do
-                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesSearch[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
         elseif #blockingRectanglesSearch > #componentsToBlockSearch then
             for i, component in ipairs(componentsToBlockSearch) do
-                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesSearch[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
             local difference = #blockingRectanglesSearch - #componentsToBlockSearch
             for i = #blockingRectanglesSearch, #blockingRectanglesSearch - difference + 1, -1 do
@@ -851,7 +862,10 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
         else
             for i = 1, #blockingRectanglesSearch, 1 do
                 local component = componentsToBlockSearch[i]
-                blockingRectanglesSearch[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesSearch[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
             for i = #blockingRectanglesSearch + 1, #componentsToBlockSearch, 1 do
                 local component = componentsToBlockSearch[i]
@@ -892,11 +906,17 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
         )
         if #blockingRectanglesFavourite == #componentsToBlockFavourite then
             for i, component in ipairs(componentsToBlockFavourite) do
-                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesFavourite[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
         elseif #blockingRectanglesFavourite > #componentsToBlockFavourite then
             for i, component in ipairs(componentsToBlockFavourite) do
-                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesFavourite[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
             local difference = #blockingRectanglesFavourite - #componentsToBlockFavourite
             for i = #blockingRectanglesFavourite, #blockingRectanglesFavourite - difference + 1, -1 do
@@ -906,7 +926,10 @@ local function drawBoxesOverUnobtaintedItemsInGe(event)
         else
             for i = 1, #blockingRectanglesFavourite, 1 do
                 local component = componentsToBlockFavourite[i]
-                blockingRectanglesFavourite[i]:SetPos(component.position.x-5, component.position.y-9)
+                local blockingRectangle = blockingRectanglesFavourite[i]
+                if blockingRectangle.position.y ~= component.position.y-9 or blockingRectangle.position.x ~= component.position.x-5 then
+                    blockingRectangle:SetPos(component.position.x-5, component.position.y-9)
+                end
             end
             for i = #blockingRectanglesFavourite + 1, #componentsToBlockFavourite, 1 do
                 local component = componentsToBlockFavourite[i]

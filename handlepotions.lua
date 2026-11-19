@@ -90,7 +90,14 @@ function potionHandler.handlePotions(potionStruct, setOfItems)
             local itemConfig = potionStruct:GetParamValue(v).name
             if v.id ~= bestPotionDoseNumberId then
                 if objectConfig.isStockmarket then
-                    setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
+                    local dose = doseIndexById[v.id]
+                    if dose ~= nil and dose > 12 then
+                        if setOfItems[id.Obj.BIGPOT_EMPTY] ~= nil then
+                            setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
+                        end
+                    else
+                        setOfItems[idConfig] = "" -- empty means item is unlocked but shouldn't be displayed
+                    end
                 end
             else
                 potionName = itemConfig:match("^(.-)%s*%(%d+%)$") -- disturbing regex, it makes "Super Restore (4)" -> "Super Restore"
